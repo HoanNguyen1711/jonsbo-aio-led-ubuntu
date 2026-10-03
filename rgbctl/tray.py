@@ -65,8 +65,13 @@ def main():
 
     with _lock:
         core.apply_config()
-    if aio_display.get_settings()["enabled"] and not aio_display.is_running():
-        aio_display.start_background()
+
+    def ensure_aio():
+        # Chỉ dự phòng khi không có service: chờ để service systemd (khởi động cùng lúc
+        # đăng nhập) giữ khoá trước, nếu không nó sẽ tự thoát và mất Restart=on-failure.
+        if aio_display.get_settings()["enabled"] and not aio_display.is_running():
+            aio_display.start_background()
+        return False
 
     ind = AppIndicator.Indicator.new(
         "rgbctl", "rgbctl-symbolic", AppIndicator.IndicatorCategory.HARDWARE,
@@ -129,5 +134,6 @@ def main():
 
     tick()
     GLib.timeout_add_seconds(2, tick)
+    GLib.timeout_add_seconds(10, ensure_aio)
     Gtk.main()
     return 0
