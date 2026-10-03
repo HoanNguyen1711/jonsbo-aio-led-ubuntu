@@ -31,17 +31,28 @@ def cleanup():
     if any(p.endswith(".service") for p in removed):
         subprocess.run(["systemctl", "--user", "daemon-reload"], stderr=subprocess.DEVNULL)
 
-    # chỉ xoá symlink trỏ về rgbctl.sh của git clone, không đụng file khác trùng tên
+    # Symlink cũ trỏ về rgbctl.sh của git clone: trỏ lại sang /usr/bin/rgbctl thay vì xoá.
+    # GNOME Shell đang chạy vẫn nhớ Exec=~/.local/bin/rgbctl của .desktop cũ tới khi đăng
+    # xuất; xoá đi thì bấm icon báo "not found in $PATH".
     link = os.path.join(HOME, ".local/bin/rgbctl")
     if os.path.islink(link) and os.readlink(link).endswith("rgbctl.sh"):
         os.remove(link)
-        removed.append(link)
+        os.symlink("/usr/bin/rgbctl", link)
+        removed.append(f"{link} (giờ trỏ tới /usr/bin/rgbctl)")
 
     for rel in FILES:
         path = os.path.join(HOME, rel)
         if os.path.isfile(path) and _is_ours(path):
             os.remove(path)
             removed.append(path)
+
+    if removed:
+        # GNOME Shell và GTK giữ cache: không làm mới thì menu vẫn chạy
+        # ~/.local/bin/rgbctl đã xoá ("not found in $PATH") và tìm icon cũ
+        for cmd in (["update-desktop-database", os.path.join(HOME, ".local/share/applications")],
+                    ["gtk-update-icon-cache", "-q", "-f", "-t",
+                     os.path.join(HOME, ".local/share/icons/hicolor")]):
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return removed
 
 
