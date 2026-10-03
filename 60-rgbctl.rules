@@ -1,0 +1,7 @@
+# Cho user đang đăng nhập truy cập LED mà không cần sudo
+# Gigabyte RGB Fusion 2 (ITE IT5711)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="5711", TAG+="uaccess"
+# SMBus khe RAM (AMD PIIX4 port 0) - RAM Corsair
+SUBSYSTEM=="i2c-dev", ATTR{name}=="SMBus PIIX4 adapter port 0*", TAG+="uaccess"
+# Màn hình nhiệt độ AIO Jonsbo (VID:PID dùng chung với thiết bị khác nên lọc theo tên)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5131", ATTRS{idProduct}=="2007", ATTRS{product}=="FBB", TAG+="uaccess"
