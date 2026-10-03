@@ -62,6 +62,10 @@ def main():
         core.apply_config()
         return 1
 
+    # autostart lúc đăng nhập và mở app từ menu đều có thể bật tray: chỉ giữ một icon
+    if not daemon.single_instance("tray"):
+        return 0
+
     with _lock:
         core.apply_config()
 

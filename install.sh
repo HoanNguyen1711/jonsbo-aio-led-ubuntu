@@ -17,6 +17,9 @@ echo "→ khởi động daemon và tray cho phiên hiện tại"
 systemctl --user daemon-reload
 systemctl --user restart rgbctl-daemon.service
 pkill -u "$(id -u)" -f "m rgbctl tray$" 2>/dev/null || true
-setsid -f /usr/bin/rgbctl tray >/dev/null 2>&1
+sleep 0.5
+# chạy trong phiên đăng nhập (systemd), không phụ thuộc terminal đang chạy script này
+systemd-run --user --quiet --collect /usr/bin/rgbctl tray 2>/dev/null \
+    || setsid -f /usr/bin/rgbctl tray >/dev/null 2>&1
 
 echo "Xong. Thử: rgbctl info"

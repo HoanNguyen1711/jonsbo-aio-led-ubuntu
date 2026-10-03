@@ -193,6 +193,7 @@ def main():
     if os.path.isdir(icons):
         Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(icons)
     Gtk.Window.set_default_icon_name("rgbctl")
+    daemon.start_tray()
     app = Gtk.Application(application_id="dev.hoan.rgbctl")
     app.connect("activate", lambda a: Window(a).present())
     return app.run(sys.argv[:1])

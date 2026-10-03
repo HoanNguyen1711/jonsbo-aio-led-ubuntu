@@ -39,17 +39,27 @@ def is_running():
     return None
 
 
-def start_background():
-    """Chạy daemon tách khỏi tiến trình hiện tại nếu chưa chạy. Trả về lỗi (str) hoặc None."""
-    if is_running():
-        return None
+def _spawn(subcommand):
+    """Chạy `rgbctl <subcommand>` tách hẳn khỏi tiến trình hiện tại (đóng GUI vẫn chạy)."""
     subprocess.Popen(
-        [sys.executable, "-m", "rgbctl", "daemon"],
+        [sys.executable, "-m", "rgbctl", subcommand],
         cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         start_new_session=True,
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
+
+
+def start_background():
+    """Chạy daemon nếu chưa chạy. Trả về lỗi (str) hoặc None."""
+    if not is_running():
+        _spawn("daemon")
     return None
+
+
+def start_tray():
+    """Bật tray nếu chưa chạy (mở app từ menu thì tray cũng hiện)."""
+    if not is_locked("tray"):
+        _spawn("tray")
 
 
 def set_aio_enabled(on):
@@ -61,16 +71,31 @@ def set_aio_enabled(on):
     return start_background() if on else None
 
 
-def _single_instance():
-    """Giữ khoá suốt đời tiến trình; False nếu đã có daemon khác (service + tray cùng khởi động)."""
-    runtime = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-    fd = os.open(os.path.join(runtime, "rgbctl-daemon.lock"), os.O_RDWR | os.O_CREAT, 0o600)
+def _lock_path(name):
+    return os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), f"rgbctl-{name}.lock")
+
+
+def single_instance(name):
+    """Giữ khoá `name` suốt đời tiến trình; False nếu đã có tiến trình khác giữ."""
+    fd = os.open(_lock_path(name), os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         os.close(fd)
         return False
-    return True
+    return True  # cố ý không đóng fd: khoá nhả khi tiến trình thoát
+
+
+def is_locked(name):
+    """Có tiến trình nào đang giữ khoá `name` không."""
+    fd = os.open(_lock_path(name), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return False
+    except BlockingIOError:
+        return True
+    finally:
+        os.close(fd)
 
 
 # --- thiết bị, tự mở lại khi lỗi --------------------------------------------
@@ -113,8 +138,8 @@ class _AioDev:
 
 # --- vòng lặp chính ----------------------------------------------------------
 def run():
-    if not _single_instance():
-        return 0
+    if not single_instance("daemon"):
+        return 0  # service và tray cùng khởi động lúc đăng nhập: chỉ một daemon chạy
     temp_path = aio_display.cpu_temp_path()
     mb = _Lazy(fusion.Fusion2)
     ram = _Lazy(corsair_ram.CorsairRAM)
