@@ -8,7 +8,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
-from . import aio_display, core  # noqa: E402
+from . import aio_display, core, daemon  # noqa: E402
 
 TARGET_LABELS = [
     ("all", "Tất cả"),
@@ -125,8 +125,7 @@ class Window(Gtk.ApplicationWindow):
             _lock.acquire()
             for t in targets:
                 try:
-                    core.apply(t, **state, save_flash=flash and t != "ram")
-                    core.remember(t, state)
+                    core.set_state(t, state, save_flash=flash and t != "ram")
                     msgs.append(f"✓ {t}")
                 except Exception as e:  # noqa: BLE001
                     msgs.append(f"✗ {t}: {e}")
@@ -162,8 +161,8 @@ class Window(Gtk.ApplicationWindow):
         box.append(self.aio_status)
 
         # đang bật trong config mà chưa có tiến trình (vd chưa cài service) thì chạy luôn
-        if settings["enabled"] and not aio_display.is_running():
-            self._aio_error = aio_display.start_background()
+        if settings["enabled"]:
+            self._aio_error = daemon.set_aio_enabled(True)
         self._aio_tick()
         GLib.timeout_add_seconds(1, self._aio_tick)
 
@@ -172,7 +171,7 @@ class Window(Gtk.ApplicationWindow):
             self.aio_value.set_text(f"{aio_display.cpu_temp(self.aio_temp_path):.0f}°C")
         except Exception:  # noqa: BLE001
             self.aio_value.set_text("—")
-        pid = aio_display.is_running()
+        pid = daemon.is_running()
         dev = aio_display.find_hidraw()
         if not dev:
             self.aio_status.set_text("Không thấy màn hình AIO")
@@ -185,12 +184,14 @@ class Window(Gtk.ApplicationWindow):
         return True
 
     def on_aio_toggle(self, switch, _pspec):
-        self._aio_error = aio_display.set_enabled(switch.get_active())
+        self._aio_error = daemon.set_aio_enabled(switch.get_active())
         GLib.timeout_add(500, lambda: self._aio_tick() and False)
 
 def main():
+    # chạy từ git clone: lấy icon trong repo; bản .deb đã cài icon vào /usr/share/icons
     icons = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons")
-    Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(icons)
+    if os.path.isdir(icons):
+        Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(icons)
     Gtk.Window.set_default_icon_name("rgbctl")
     app = Gtk.Application(application_id="dev.hoan.rgbctl")
     app.connect("activate", lambda a: Window(a).present())

@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from . import aio_display, core, corsair_ram, fusion
+from . import __version__, aio_display, core, corsair_ram, daemon, fusion
 
 EPILOG = """ví dụ:
   rgbctl set static ff0000              # tất cả (main + RAM) màu đỏ
@@ -9,7 +9,7 @@ EPILOG = """ví dụ:
   rgbctl set rainbow -t argb1 -s 5      # header ARGB_V2_1 cầu vồng nhanh
   rgbctl off                            # tắt hết
   rgbctl apply                          # áp dụng lại config đã lưu
-  rgbctl aio-temp                       # nhiệt độ CPU lên màn hình AIO
+  rgbctl daemon                         # tiến trình nền: màn hình AIO + hiệu ứng đồng bộ
   rgbctl gui                            # mở cửa sổ
 """
 
@@ -37,10 +37,8 @@ def _apply_targets(targets, state, save_flash, remember):
     rc = 0
     for t in targets:
         try:
-            core.apply(t, **state, save_flash=save_flash and t != "ram")
+            core.set_state(t, state, save=remember, save_flash=save_flash and t != "ram")
             print(f"✓ {t}")
-            if remember:
-                core.remember(t, state)
         except Exception as e:
             print(f"✗ {t}: {e}", file=sys.stderr)
             rc = 1
@@ -85,14 +83,27 @@ def cmd_leds(args):
 
 def cmd_aio_temp(args):
     if args.once:
-        print(f"Đã gửi {aio_display.run(once=True):.0f}°C lên màn hình AIO")
+        print(f"Đã gửi {aio_display.send_once():.0f}°C lên màn hình AIO")
     else:
-        aio_display.run()
+        return daemon.run()
+
+
+def cmd_daemon(_args):
+    return daemon.run()
 
 
 def cmd_tray(_args):
     from . import tray
     return tray.main()
+
+
+def cmd_uninstall_legacy(_args):
+    from . import legacy
+    removed = legacy.cleanup()
+    for path in removed:
+        print(f"đã xoá {path}")
+    if not removed:
+        print("Không có bản cài kiểu cũ nào trong thư mục home.")
 
 
 def cmd_gui(_args):
@@ -107,6 +118,7 @@ def main(argv=None):
         epilog=EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    p.add_argument("--version", action="version", version=f"rgbctl {__version__}")
     sub = p.add_subparsers(dest="cmd")
 
     sub.add_parser("info", help="xem thiết bị phát hiện được").set_defaults(func=cmd_info)
@@ -134,13 +146,19 @@ def main(argv=None):
     l.add_argument("count", type=int, choices=fusion.LED_COUNT_STEPS)
     l.set_defaults(func=cmd_leds)
 
-    a = sub.add_parser("aio-temp", help="hiển thị nhiệt độ CPU lên màn hình AIO (chạy liên tục)")
+    sub.add_parser("daemon", help="tiến trình nền: màn hình AIO + hiệu ứng thở/nháy/đổi màu").set_defaults(
+        func=cmd_daemon)
+
+    a = sub.add_parser("aio-temp", help="như daemon (tên cũ); --once: gửi nhiệt độ một lần")
     a.add_argument("--once", action="store_true", help="gửi một lần rồi thoát")
     a.set_defaults(func=cmd_aio_temp)
 
     sub.add_parser("gui", help="mở giao diện").set_defaults(func=cmd_gui)
     sub.add_parser("tray", help="icon trên thanh trên cùng (áp dụng config khi khởi động)").set_defaults(
         func=cmd_tray)
+
+    sub.add_parser("uninstall-legacy", help="dọn bản cài kiểu cũ (symlink vào git clone)").set_defaults(
+        func=cmd_uninstall_legacy)
 
     args = p.parse_args(argv)
     if not args.cmd:

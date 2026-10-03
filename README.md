@@ -10,8 +10,8 @@ Tool nhỏ, gọn để điều khiển LED và màn hình nhiệt độ AIO tr�
 - **Màn hình nhiệt độ trên block AIO Jonsbo** (hiện nhiệt độ CPU)
 
 Có 3 cách dùng: dòng lệnh (`rgbctl`), cửa sổ GTK4 và icon trên thanh trên cùng (tray).
-Viết bằng Python thuần, nói chuyện trực tiếp với `/dev/hidraw*` và `/dev/i2c-*`, không cần
-thư viện ngoài (GUI dùng PyGObject có sẵn trên Ubuntu).
+Hiệu ứng thở / nháy / đổi màu **chạy đồng bộ** trên fan, AIO và RAM. Viết bằng Python thuần,
+nói chuyện trực tiếp với `/dev/hidraw*` và `/dev/i2c-*`. Cài bằng gói `.deb`.
 
 > Tool này viết cho một cấu hình cụ thể (bên dưới). Máy khác dùng chip IT5711 / RAM Corsair
 > DDR5 / AIO Jonsbo có màn hình nhiều khả năng chạy được, nhưng chưa được kiểm chứng.
@@ -29,7 +29,7 @@ thư viện ngoài (GUI dùng PyGObject có sẵn trên Ubuntu).
 - [Cách hoạt động / protocol](#cách-hoạt-động--protocol)
 - [Xử lý sự cố](#xử-lý-sự-cố)
 - [Gỡ cài đặt](#gỡ-cài-đặt)
-- [Cấu trúc code](#cấu-trúc-code)
+- [Phát triển](#phát-triển)
 - [Ghi công](#ghi-công)
 
 ---
@@ -42,7 +42,7 @@ thư viện ngoài (GUI dùng PyGObject có sẵn trên Ubuntu).
 | Chip RGB trên main | ITE **IT5711** (`IT5711-GIGABYTE V1.0.19.6`), USB `048d:5711` | `/dev/hidraw*`, HID feature report `0xCC` |
 | Fan case | Jonsbo ARGB (5V 3 pin) | header ARGB_V2_x của main |
 | AIO | Jonsbo, LED ARGB + màn hình 2 số | LED: header ARGB của main · màn hình: USB `5131:2007` |
-| RAM | Corsair Vengeance RGB DDR5 `CMH96GX5M2E6000C36` (2 thanh) | SMBus AMD PIIX4, địa chỉ `0x18–0x1F` |
+| RAM | Corsair Vengeance RGB DDR5 `CMH96GX5M2E6000C36` (2 thanh, fw 1.2.9, protocol 4) | SMBus AMD PIIX4, địa chỉ `0x18–0x1F` |
 | CPU | AMD Ryzen 7 9700X | nhiệt độ đọc từ `k10temp` (Tctl) |
 | OS | Ubuntu, GNOME (Wayland), kernel 7.0 | |
 
@@ -55,54 +55,56 @@ của main.
 
 | Tính năng | Trạng thái |
 |---|---|
-| Fan/AIO/main: **Tĩnh** (static) | ✅ đã kiểm chứng |
-| Fan/AIO/main: **Cầu vồng** (rainbow) | ✅ đã kiểm chứng |
-| Fan/AIO/main: chế độ direct (màu từng LED) | ✅ đã kiểm chứng (dùng nội bộ khi debug) |
-| Fan/AIO/main: **Thở / Nháy / Đổi màu** | ⚠️ đã cài đặt, chưa kiểm chứng trên máy thật |
-| RAM Corsair: **Tĩnh / Tắt / Cầu vồng** | ✅ đã kiểm chứng (cần [bật SMBus](#bật-smbus-cho-ram-làm-1-lần)) |
-| RAM Corsair: **Thở / Nháy / Đổi màu** | ⚠️ đã cài đặt, chưa kiểm chứng |
+| Fan/AIO/main/RAM: **Tĩnh, Tắt, Cầu vồng** (chip tự chạy) | ✅ đã kiểm chứng |
+| Fan/AIO/main/RAM: **Thở** (daemon, đồng bộ mọi thiết bị) | ✅ đã kiểm chứng |
+| Fan/AIO/main/RAM: **Nháy, Đổi màu** (daemon) | ⚠️ cùng cơ chế với Thở, chưa kiểm chứng bằng mắt |
 | Màn hình AIO hiện nhiệt độ CPU | ✅ đã kiểm chứng |
+| Gói `.deb`, chuyển từ bản cài cũ | ✅ đã kiểm chứng |
 | GUI GTK4 | ✅ |
-| Icon tray | ⚠️ đã cài đặt, cần gói `gir1.2-ayatanaappindicator3-0.1` (install.sh tự cài) |
+| Icon tray | ⚠️ chạy được, chưa thử hết các mục menu |
+
+RAM cần [bật SMBus](#bật-smbus-cho-ram-làm-1-lần) trước.
 
 ## Cài đặt
 
-Yêu cầu: Ubuntu có GNOME, Python 3, PyGObject/GTK4 (có sẵn trên Ubuntu desktop).
+Yêu cầu: Ubuntu có GNOME (24.04 trở lên).
+
+**Cách 1: tải gói có sẵn.** Vào trang
+[Releases](https://github.com/HoanNguyen1711/jonsbo-aio-led-ubuntu/releases), tải
+`rgbctl_<version>_all.deb`, rồi:
+
+```sh
+sudo apt install ./rgbctl_*_all.deb
+```
+
+**Cách 2: build từ source.**
 
 ```sh
 git clone git@github.com:HoanNguyen1711/jonsbo-aio-led-ubuntu.git
 cd jonsbo-aio-led-ubuntu
-./install.sh
+./install.sh        # build .deb, cài bằng apt, dọn bản cài cũ, khởi động daemon + tray
 ```
 
-`install.sh` làm các việc sau.
+`apt` tự cài các gói phụ thuộc: `python3-gi`, `gir1.2-gtk-4.0`, `gir1.2-gtk-3.0` và
+`gir1.2-ayatanaappindicator3-0.1`. Gói cuối là phần nối giữa Python và thư viện tray
+`libayatana-appindicator` của hệ thống, chỉ khoảng 30 KB.
 
-**Cần sudo (sẽ hỏi mật khẩu):**
+Gói cài các file sau:
 
-1. `apt-get install gir1.2-ayatanaappindicator3-0.1`: thư viện cho icon tray.
-2. Chép `60-rgbctl.rules` vào `/etc/udev/rules.d/`: cho user đang đăng nhập truy cập 3 thiết bị
-   mà không cần sudo:
-   - chip RGB Gigabyte (`048d:5711`)
-   - SMBus khe RAM (`SMBus PIIX4 adapter port 0`)
-   - màn hình AIO (`5131:2007` **và** tên `FBB`, vì VID/PID này bị nhiều thiết bị khác dùng chung)
-3. Tạo `/etc/modules-load.d/rgbctl.conf` để nạp `i2c-dev` khi khởi động.
+| Đường dẫn | Tác dụng |
+|---|---|
+| `/usr/bin/rgbctl`, `/usr/lib/rgbctl/` | lệnh và code |
+| `/usr/lib/udev/rules.d/60-rgbctl.rules` | cho user đang đăng nhập truy cập chip LED, SMBus khe RAM, màn hình AIO mà không cần sudo |
+| `/usr/lib/modules-load.d/rgbctl.conf` | nạp `i2c-dev` khi khởi động |
+| `/usr/lib/systemd/user/rgbctl-daemon.service` | daemon (bật sẵn cho mọi user): màn hình AIO + hiệu ứng đồng bộ |
+| `/etc/xdg/autostart/rgbctl-tray.desktop` | tray tự chạy khi đăng nhập, áp dụng lại màu đã lưu |
+| `/usr/share/applications/dev.hoan.rgbctl.desktop`, `/usr/share/icons/hicolor/…` | mục **RGB Control** trong menu ứng dụng và icon |
 
-**Trong thư mục home (không cần sudo):**
+Sau khi cài, đăng xuất rồi đăng nhập lại (`install.sh` khởi động luôn nên không cần).
 
-4. `~/.local/bin/rgbctl`: symlink về thư mục repo (**đừng xoá/di chuyển thư mục repo**).
-5. `~/.local/share/icons/hicolor/…/rgbctl*.svg` và `~/.local/share/applications/dev.hoan.rgbctl.desktop`:
-   icon và mục **RGB Control** trong menu ứng dụng.
-6. `~/.config/autostart/rgbctl-tray.desktop`: tray tự chạy khi đăng nhập và áp dụng lại config.
-7. `~/.config/systemd/user/rgbctl-aio-temp.service`: gửi nhiệt độ CPU lên màn hình AIO.
-
-Nếu shell báo không tìm thấy lệnh `rgbctl`, thêm vào `~/.zshrc` hoặc `~/.bashrc`:
-
-```sh
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Không muốn cài cũng được: chạy thẳng `sudo ./rgbctl.sh <lệnh>` từ thư mục repo. GUI và tray
-không chạy được bằng sudo trên Wayland.
+**Nâng cấp từ bản cài kiểu cũ** (`install.sh` trước 0.2, tạo symlink vào git clone): postinst
+tự xoá file cũ trong `/etc`. Phần trong thư mục home thì chạy `rgbctl uninstall-legacy`
+(`install.sh` mới tự gọi lệnh này).
 
 ### Bật SMBus cho RAM (làm 1 lần)
 
@@ -114,9 +116,11 @@ ACPI Warning: SystemIO range 0x0000000000000B00-0x0000000000000B08 conflicts wit
 ACPI: OSL: Resource conflict; ACPI support missing from driver?
 ```
 
-Cần thêm tham số kernel `acpi_enforce_resources=lax`. OpenRGB cũng yêu cầu y hệt:
+Cần thêm tham số kernel `acpi_enforce_resources=lax`. OpenRGB cũng yêu cầu y hệt. Gói `.deb`
+**không** tự sửa tham số kernel, chỉ nhắc khi cài:
 
 ```sh
+sudo cp /etc/default/grub /etc/default/grub.bak
 sudo sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="/&acpi_enforce_resources=lax /' /etc/default/grub
 sudo update-grub
 sudo reboot
@@ -127,7 +131,7 @@ Sau khi reboot:
 ```sh
 rgbctl info
 # Main : IT5711-GIGABYTE V1.0.19.6 (fw 1.0.19.6) tại /dev/hidraw6
-# RAM  : 2 thanh Corsair (...)
+# RAM  : 2 thanh Corsair (0x19, 0x1b)
 # AIO  : màn hình nhiệt độ tại /dev/hidraw7
 ```
 
@@ -144,19 +148,26 @@ rgbctl info
 rgbctl info                           # xem thiết bị phát hiện được
 rgbctl set static ff0000              # tất cả (main + RAM) màu đỏ
 rgbctl set rainbow                    # cầu vồng
-rgbctl set breathing 00aaff -t ram    # chỉ RAM, hiệu ứng thở
+rgbctl set breathing 00aaff           # thở, đồng bộ fan/AIO/RAM
+rgbctl set static ff8800 -t ram       # chỉ RAM
 rgbctl set rainbow -t argb1 -s 5      # chỉ header ARGB_V2_1, nhanh nhất
 rgbctl set cycle -b 40                # đổi màu, độ sáng 40%
 rgbctl off                            # tắt đèn
 rgbctl apply                          # áp dụng lại config đã lưu
-rgbctl aio-temp                       # gửi nhiệt độ CPU lên màn hình AIO (chạy liên tục)
-rgbctl aio-temp --once                # gửi một lần (để thử)
+rgbctl aio-temp --once                # gửi nhiệt độ lên màn hình AIO một lần (để thử)
 rgbctl leds 64                        # số LED tối đa mỗi header ARGB
 rgbctl gui                            # mở cửa sổ
 rgbctl tray &                         # icon trên thanh trên cùng
+rgbctl daemon                         # tiến trình nền (bình thường do systemd chạy)
+rgbctl --version
 ```
 
-**Hiệu ứng:** `static`, `breathing`, `flash`, `cycle`, `rainbow`, `off`
+**Hiệu ứng:**
+
+| Hiệu ứng | Ai chạy | Ghi chú |
+|---|---|---|
+| `static`, `rainbow`, `off` | chip trên từng thiết bị | vẫn chạy khi daemon tắt |
+| `breathing`, `flash`, `cycle` | daemon (~30 khung hình/giây) | đồng bộ hoàn toàn giữa fan, AIO, 2 thanh RAM; đèn đứng yên nếu daemon tắt |
 
 **Tuỳ chọn của `set` / `off`:**
 
@@ -166,8 +177,8 @@ rgbctl tray &                         # icon trên thanh trên cùng
 | `-t, --target` | `all`, `mb`, `argb1`, `argb2`, `argb3`, `board`, `ram` | `all` |
 | `-s, --speed` | 1 (chậm) … 5 (nhanh) | 3 |
 | `-b, --brightness` | 0 … 100 | 100 |
-| `--flash` | ghi luôn vào flash của main, nên màu giữ cả lúc boot trước khi đăng nhập | tắt |
-| `--no-save` | không ghi vào config | tắt |
+| `--flash` | ghi vào flash của main, nên màu giữ cả lúc boot trước khi đăng nhập (chỉ với `static`/`rainbow`/`off`) | tắt |
+| `--no-save` | không ghi vào config (không dùng được với hiệu ứng của daemon) | tắt |
 
 **Target:**
 
@@ -189,12 +200,11 @@ rgbctl tray &                         # icon trên thanh trên cùng
 - **Thiết bị / Hiệu ứng / Màu / Tốc độ / Độ sáng** rồi bấm **Áp dụng**. Bấm vào ô màu có sẵn là
   áp dụng ngay.
 - **Lưu vào main**: tương đương `--flash`.
-- Mục **Màn hình AIO**: công tắc **Hiển thị** bật/tắt việc gửi nhiệt độ. Bật thì GUI tự chạy
-  tiến trình nền nếu chưa có, tắt thì dừng nó. Đóng cửa sổ thì tiến trình nền vẫn chạy.
+- Mục **Màn hình AIO**: công tắc **Hiển thị** bật/tắt việc gửi nhiệt độ lên màn hình.
 
 ### Tray
 
-Tự chạy khi đăng nhập (sau `install.sh`), hoặc chạy tay `rgbctl tray &`. Menu gồm:
+Tự chạy khi đăng nhập, hoặc chạy tay `rgbctl tray &`. Menu gồm:
 
 ```
 Cầu vồng
@@ -208,31 +218,37 @@ Mở cửa sổ…
 Thoát
 ```
 
-Cần extension **Ubuntu AppIndicators** (Ubuntu bật sẵn). Nếu thiếu gói tray, `rgbctl tray` vẫn
-áp dụng config rồi thoát, nên màu vẫn được khôi phục lúc đăng nhập.
+Cần extension **Ubuntu AppIndicators** (Ubuntu bật sẵn).
 
-### Màn hình nhiệt độ AIO
+### Daemon
 
-Màn hình **không tự đo nhiệt độ**. Máy phải gửi số liên tục (5 lần/giây), nếu không màn hình
-sẽ trống. Sau `install.sh`, việc này do service `rgbctl-aio-temp` làm:
+`rgbctl-daemon` (systemd user service) làm 2 việc:
+
+1. **Màn hình AIO:** màn hình không tự đo nhiệt độ, nên daemon gửi nhiệt độ CPU 5 lần/giây.
+   Không có ai gửi thì màn hình trống.
+2. **Hiệu ứng thở / nháy / đổi màu:** tính màu theo một đồng hồ chung rồi gửi thẳng cho fan,
+   AIO (chế độ direct của IT5711) và RAM (chế độ direct của Corsair).
+
+Daemon đọc lại config mỗi khi file đổi, nên đổi màu trong GUI/tray/CLI là có tác dụng ngay.
+Khi không có hiệu ứng nào cần chạy, daemon chỉ thức 5 lần/giây cho màn hình AIO.
 
 ```sh
-systemctl --user status rgbctl-aio-temp
-journalctl --user -u rgbctl-aio-temp
+systemctl --user status rgbctl-daemon
+journalctl --user -u rgbctl-daemon
 ```
 
-Chữ **CPU** và **JONSBO** trên màn hình là in cố định. Đã thử byte đơn vị (°C/°F) và byte chế
-độ hiển thị trong protocol: màn hình này bỏ qua, chỉ hiện được một số 2 chữ số.
+Chữ **CPU** và **JONSBO** trên màn hình AIO là in cố định. Đã thử byte đơn vị (°C/°F) và byte
+chế độ hiển thị trong protocol: màn hình này bỏ qua, chỉ hiện được một số 2 chữ số.
 
 ## Config
 
-`~/.config/rgbctl/config.json`. GUI, tray và lệnh `set` tự ghi vào file này. `rgbctl apply`
-và tray đọc nó lúc đăng nhập.
+`~/.config/rgbctl/config.json`. GUI, tray và lệnh `set` tự ghi vào file này. Tray (lúc đăng
+nhập), `rgbctl apply` và daemon đọc nó.
 
 ```json
 {
-  "mb":  { "mode": "rainbow", "color": "ffffff", "speed": 3, "brightness": 100 },
-  "ram": { "mode": "static",  "color": "ff0000", "speed": 3, "brightness": 100 },
+  "mb":  { "mode": "breathing", "color": "ff0000", "speed": 3, "brightness": 100 },
+  "ram": { "mode": "breathing", "color": "ff0000", "speed": 3, "brightness": 100 },
   "aio": { "enabled": true }
 }
 ```
@@ -246,16 +262,17 @@ chạy trước để các header riêng ghi đè lên. Đặt lại `mb` sẽ x
 
 - Interface HID vendor, usage page `0xFF89`. Mọi lệnh là **feature report 64 byte**, byte đầu
   là report ID `0xCC`. Gửi qua `ioctl(HIDIOCSFEATURE)` trên `/dev/hidrawN`.
-- `CC 60`, rồi đọc feature report: thông tin chip (tên, firmware, số LED mỗi header, thứ tự
-  màu). Trên máy này thứ tự màu của dải ARGB là **GRB**.
+- `CC 60` / `CC 61`, rồi đọc feature report: thông tin chip (tên, firmware, số LED mỗi header,
+  thứ tự màu từng header). Trên máy này thứ tự màu của dải ARGB là **GRB**.
 - `CC 20+n …`: hiệu ứng phần cứng cho vùng `n`. Gói gồm loại hiệu ứng, độ sáng, màu
   (`0x00RRGGBB`), 4 chu kỳ thời gian và 4 tham số. Sau đó gửi `CC 28 <mask>` để áp dụng.
   - Vùng trên B850M GAMING X WIFI6E: `argb1`=5, `argb2`=6, `argb3`=7, Chipset Accent=2, LED_C=4.
-- `CC 32 <mask>`: bật/tắt hiệu ứng built-in cho từng header ARGB (bit = 1 là tắt, tức chế độ
-  direct).
+- `CC 32 <mask>`: header ARGB nào có bit = 1 thì chạy chế độ direct (máy gửi màu), còn lại chạy
+  hiệu ứng built-in. Lệnh này đặt cả mask một lần, nên mask luôn được tính từ config.
+- `CC 58/59/62 <offset> <số byte> <màu…>`: chế độ direct, tối đa 19 LED mỗi gói, cho header
+  ARGB 1/2/3.
 - `CC 34 …`: số LED tối đa mỗi header.
 - `CC 47 1` + `CC 5E`: lưu trạng thái vào flash.
-- `CC 58/59/62 …`: chế độ direct, gửi màu từng LED cho header ARGB 1/2/3.
 
 **Hai điều phát hiện trên chip này, khác với OpenRGB:**
 
@@ -267,13 +284,15 @@ chạy trước để các header riêng ghi đè lên. Đặt lại `mb` sẽ x
 
 ### Corsair Vengeance RGB DDR5 (`rgbctl/corsair_ram.py`)
 
-- SMBus qua `/dev/i2c-N` (`ioctl I2C_SMBUS`, kiểu byte data). Chỉ quét `0x18–0x1F`. Nhận diện
-  bằng thanh ghi `0x43 ∈ {1A,1B,1C}` và `0x44 ∈ {01,03,04}`.
+- SMBus qua `/dev/i2c-N` (`ioctl I2C_SMBUS`). Chỉ quét `0x18–0x1F`. Nhận diện bằng thanh ghi
+  `0x43 ∈ {1A,1B,1C}` và `0x44 ∈ {01,03,04}`.
 - Đặt hiệu ứng: reset buffer (`0x0B`), bắt đầu (`0x21`), ghi 20 byte cấu hình qua `0x20`, đọc
   checksum CRC-8 ở `0x42` để so, khớp thì ghi `0x82 = 1` để áp dụng. Lệch thì thử lại tối đa 3 lần.
 - **Chế độ tĩnh (`0x10`) không lấy màu trong gói hiệu ứng** mà lấy từ bộ đệm màu từng LED:
   ghi `10 LED × (R, G, B, FF)` theo cùng cách trên rồi `0x82 = 2`. Thiếu bước này RAM sáng
   trắng (màu mặc định). "Tắt" là chế độ tĩnh với màu đen.
+- **Chế độ direct** (protocol ≥ 4): ghi một khối SMBus 32 byte `[10, R,G,B × 10, CRC-8]` vào
+  `0x31`. Mất khoảng 4 ms mỗi thanh, nên daemon chạy được 30 khung hình/giây.
 
 ### Màn hình AIO Jonsbo (`rgbctl/aio_display.py`)
 
@@ -282,56 +301,72 @@ chạy trước để các header riêng ghi đè lên. Đặt lại `mb` sẽ x
 - Khung tin: `00 01 02 <nhiệt độ> <phần trăm> <đơn vị> 00 …`. Ghi vào hidraw với một byte
   `0x00` đứng đầu (report ID rỗng, kernel bỏ byte này), gửi lại mỗi 200 ms.
 - Nhiệt độ đọc từ `k10temp` `temp1_input` (Tctl).
-- Chống chạy trùng bằng `flock` trên `$XDG_RUNTIME_DIR/rgbctl-aio.lock`, vì service và tray
-  có thể cùng khởi động.
+
+### Daemon (`rgbctl/daemon.py`, `rgbctl/effects.py`)
+
+- Chip trên main và chip trên RAM có đồng hồ riêng, nên hiệu ứng phần cứng không bao giờ khớp
+  nhau. Hai thanh RAM được ghi lần lượt nên cũng lệch pha. Vì vậy thở / nháy / đổi màu được tính
+  trong `effects.py` theo `time.time()` và gửi cho mọi thiết bị trong cùng một khung hình.
+- Chỉ gửi khi màu đổi. Thiết bị lỗi (rút ra, sleep/resume) thì 10 giây sau mở lại.
+- Chống chạy trùng bằng `flock` trên `$XDG_RUNTIME_DIR/rgbctl-daemon.lock`. Tray chờ 10 giây
+  mới tự chạy daemon (dự phòng), để service systemd luôn giữ khoá trước.
+- Khi đổi sang hiệu ứng phần cứng, CLI/GUI/tray lưu config trước, chờ 150 ms cho daemon thôi gửi
+  rồi mới ghi vào chip. Config được ghi kiểu atomic (file tạm + `rename`).
 
 ## Xử lý sự cố
 
 | Triệu chứng | Cách xử lý |
 |---|---|
-| `Permission denied: '/dev/hidrawN'` | chưa chạy `install.sh`, hoặc chạy `sudo udevadm trigger` rồi đăng xuất/đăng nhập lại |
+| `Permission denied: '/dev/hidrawN'` | đăng xuất/đăng nhập lại sau khi cài gói; hoặc `sudo udevadm trigger` |
 | `RAM : Không thấy SMBus PIIX4` | chưa thêm `acpi_enforce_resources=lax`, xem [phần trên](#bật-smbus-cho-ram-làm-1-lần) |
 | `RAM : Không tìm thấy thanh RAM Corsair RGB nào` | thử `sudo apt install i2c-tools && sudo i2cdetect -y <bus>` để xem địa chỉ nào trả lời |
 | Đặt hiệu ứng xong fan/AIO tắt hẳn | báo lại hiệu ứng nào (xem mục phát hiện ở trên). Thử `rgbctl set static ff0000 -t mb` để chắc kết nối vẫn ổn |
+| Thở/nháy/đổi màu đứng yên | daemon không chạy: `systemctl --user status rgbctl-daemon` |
 | Fan chỉ sáng một phần dải LED | `rgbctl leds 256` |
-| Màn hình AIO trống | `systemctl --user status rgbctl-aio-temp`; thử `rgbctl aio-temp --once` |
-| Màn hình AIO chớp `88` rồi tắt | thiết bị vừa khởi động lại; service tự kết nối lại sau vài giây |
+| Màn hình AIO trống | `systemctl --user status rgbctl-daemon`; thử `rgbctl aio-temp --once` |
+| Màn hình AIO chớp `88` rồi tắt | thiết bị vừa khởi động lại; daemon tự mở lại sau vài giây |
 | Không thấy icon tray | kiểm tra `gnome-extensions list --enabled \| grep appindicator`; chạy `rgbctl tray` trong terminal để xem lỗi |
-| Lệnh `rgbctl` không tồn tại | thêm `~/.local/bin` vào `PATH` |
+| Tray / daemon chạy 2 lần sau khi nâng cấp | `rgbctl uninstall-legacy` rồi đăng nhập lại |
 
 ## Gỡ cài đặt
 
 ```sh
-systemctl --user disable --now rgbctl-aio-temp
-rm ~/.config/systemd/user/rgbctl-aio-temp.service \
-   ~/.config/autostart/rgbctl-tray.desktop \
-   ~/.local/share/applications/dev.hoan.rgbctl.desktop \
-   ~/.local/share/icons/hicolor/scalable/apps/rgbctl.svg \
-   ~/.local/share/icons/hicolor/symbolic/apps/rgbctl-symbolic.svg \
-   ~/.local/bin/rgbctl
-rm -r ~/.config/rgbctl
-sudo rm /etc/udev/rules.d/60-rgbctl.rules /etc/modules-load.d/rgbctl.conf
-sudo udevadm control --reload
+sudo apt remove rgbctl
+rm -r ~/.config/rgbctl        # nếu muốn xoá cả config
 # nếu đã thêm: xoá acpi_enforce_resources=lax trong /etc/default/grub rồi sudo update-grub
 ```
 
-## Cấu trúc code
+## Phát triển
+
+Chạy thẳng từ git clone, không cần cài: `./rgbctl.sh <lệnh>`. Muốn đọc/ghi thiết bị mà chưa cài
+gói (chưa có udev rule) thì cần `sudo`. GUI và tray không chạy được bằng sudo trên Wayland.
 
 ```
 .
-├── install.sh              # cài đặt cho user hiện tại
-├── 60-rgbctl.rules         # udev: quyền truy cập thiết bị cho user đang đăng nhập
-├── rgbctl.sh               # launcher (được symlink vào ~/.local/bin/rgbctl)
+├── build-deb.sh            # build dist/rgbctl_<version>_all.deb (chỉ cần dpkg-deb)
+├── install.sh              # build + apt install + dọn bản cài cũ
+├── rgbctl.sh               # chạy từ git clone
 ├── icons/                  # icon app (màu) + icon tray (symbolic)
+├── packaging/              # control, postinst/prerm/postrm, udev rule, .desktop, service
+├── .github/workflows/      # CI: build .deb mỗi lần push; tag v* thì tạo Release
 └── rgbctl/
     ├── fusion.py           # Gigabyte RGB Fusion 2 / IT5711 qua hidraw
     ├── corsair_ram.py      # Corsair DDR5 qua SMBus
     ├── aio_display.py      # màn hình nhiệt độ AIO Jonsbo
-    ├── core.py             # gộp hiệu ứng chung cho main + RAM, đọc/ghi config
+    ├── effects.py          # hiệu ứng do phần mềm tính (thở / nháy / đổi màu)
+    ├── daemon.py           # tiến trình nền: màn hình AIO + hiệu ứng đồng bộ
+    ├── core.py             # gộp hiệu ứng cho main + RAM, đọc/ghi config
     ├── cli.py              # dòng lệnh
     ├── gui.py              # cửa sổ GTK4
-    └── tray.py             # icon tray (GTK3 + AyatanaAppIndicator)
+    ├── tray.py             # icon tray (GTK3 + AyatanaAppIndicator)
+    └── legacy.py           # dọn bản cài kiểu cũ
 ```
+
+**Ra bản mới:**
+
+1. Sửa `__version__` trong `rgbctl/__init__.py`, ví dụ `0.3.0`.
+2. Commit, rồi `git tag v0.3.0 && git push --tags`.
+3. GitHub Actions build `.deb` và tạo Release kèm file. Tag khác version trong code thì job báo lỗi.
 
 ## Ghi công
 

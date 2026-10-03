@@ -1,0 +1,2 @@
+#!/bin/sh
+PYTHONPATH=/usr/lib/rgbctl exec python3 -m rgbctl "$@"

@@ -13,6 +13,7 @@ I2C_SLAVE = 0x0703
 I2C_SMBUS = 0x0720
 SMBUS_READ, SMBUS_WRITE = 1, 0
 SMBUS_BYTE_DATA = 2
+SMBUS_BLOCK_DATA = 5
 
 # Địa chỉ controller LED trên thanh DDR5 (DDR4 dùng 0x58-0x5F, cố ý không quét)
 ADDRS = range(0x18, 0x20)
@@ -21,6 +22,7 @@ REG_RESET_BUFFER = 0x0B
 REG_SET_BINARY_DATA = 0x20
 REG_BINARY_START = 0x21
 REG_STATUS = 0x30
+REG_DIRECT_BLOCK_1 = 0x31
 REG_GET_CHECKSUM = 0x42
 REG_WRITE_CONFIGURATION = 0x82
 ID_EFFECT_CONFIGURATION = 1
@@ -90,6 +92,17 @@ class SMBus:
         fcntl.ioctl(self.fd, I2C_SMBUS, args)
         return data.byte
 
+    def write_block(self, addr, reg, data):
+        if addr != self.addr:
+            fcntl.ioctl(self.fd, I2C_SLAVE, addr)
+            self.addr = addr
+        buf = _SmbusData()
+        buf.block[0] = len(data)
+        for i, b in enumerate(data):
+            buf.block[i + 1] = b
+        fcntl.ioctl(self.fd, I2C_SMBUS, _SmbusIoctl(SMBUS_WRITE, reg, SMBUS_BLOCK_DATA,
+                                                     ctypes.pointer(buf)))
+
     def read(self, addr, reg):
         return self._xfer(addr, SMBUS_READ, reg)
 
@@ -155,6 +168,14 @@ class CorsairRAM:
         gói hiệu ứng (thiếu bước này RAM sẽ sáng trắng)."""
         r, g, b = (c * brightness // 255 for c in color)
         return self._write_buffer(bytes([r, g, b, 0xFF]) * LED_COUNT, ID_COLOR_DATA)
+
+    def set_direct(self, color):
+        """Chế độ direct (protocol >= 4): tô cả thanh một màu ngay lập tức, không lưu.
+        Dùng cho hiệu ứng do daemon tính; gói 10 LED vừa đúng 32 byte nên chỉ cần 1 khối."""
+        pkt = bytes([LED_COUNT]) + bytes(color) * LED_COUNT
+        pkt += bytes([crc8(pkt)])
+        for addr in self.sticks:
+            self.bus.write_block(addr, REG_DIRECT_BLOCK_1, pkt)
 
     def _write_buffer(self, data, buffer_id):
         """Ghi `data` vào buffer tạm, so CRC-8 với thiết bị rồi áp dụng vào `buffer_id`."""

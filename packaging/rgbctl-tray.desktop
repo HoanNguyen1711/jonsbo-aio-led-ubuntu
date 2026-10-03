@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=RGB Control (tray)
+Comment=Icon tray, áp dụng lại màu đã lưu khi đăng nhập
+Exec=rgbctl tray
+Icon=rgbctl
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

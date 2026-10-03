@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=RGB Control
+Comment=Điều khiển LED fan, AIO và RAM
+Exec=rgbctl gui
+Icon=rgbctl
+Categories=Utility;Settings;HardwareSettings;
+Keywords=rgb;led;fan;aio;jonsbo;corsair;gigabyte;

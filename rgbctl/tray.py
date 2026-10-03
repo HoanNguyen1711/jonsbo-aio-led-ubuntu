@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 
-from . import aio_display, core
+from . import aio_display, core, daemon
 
 COLORS = [
     ("Đỏ", "ff0000"),
@@ -45,8 +45,7 @@ def _apply_all(mode, color=None):
         with _lock:
             for t in ("mb", "ram"):
                 try:
-                    core.apply(t, **state)
-                    core.remember(t, state)
+                    core.set_state(t, state)
                 except Exception as e:  # noqa: BLE001 - RAM có thể chưa bật SMBus
                     print(f"rgbctl tray: {t}: {e}", file=sys.stderr)
 
@@ -69,15 +68,16 @@ def main():
     def ensure_aio():
         # Chỉ dự phòng khi không có service: chờ để service systemd (khởi động cùng lúc
         # đăng nhập) giữ khoá trước, nếu không nó sẽ tự thoát và mất Restart=on-failure.
-        if aio_display.get_settings()["enabled"] and not aio_display.is_running():
-            aio_display.start_background()
+        if aio_display.get_settings()["enabled"]:
+            daemon.start_background()
         return False
 
     ind = AppIndicator.Indicator.new(
         "rgbctl", "rgbctl-symbolic", AppIndicator.IndicatorCategory.HARDWARE,
     )
-    # lấy icon thẳng từ repo, không phụ thuộc đã cài icon vào theme hay chưa
-    ind.set_icon_theme_path(ICONS_DIR)
+    # chạy từ git clone: lấy icon trong repo; bản .deb đã cài icon vào /usr/share/icons
+    if os.path.isdir(ICONS_DIR):
+        ind.set_icon_theme_path(ICONS_DIR)
     ind.set_status(AppIndicator.IndicatorStatus.ACTIVE)
     ind.set_title("RGB Control")
 
@@ -104,7 +104,7 @@ def main():
 
     aio = Gtk.CheckMenuItem(label="Màn hình AIO")
     aio.set_active(aio_display.get_settings()["enabled"])
-    aio_handler = aio.connect("toggled", lambda w: aio_display.set_enabled(w.get_active()))
+    aio_handler = aio.connect("toggled", lambda w: daemon.set_aio_enabled(w.get_active()))
     menu.append(aio)
     menu.append(Gtk.SeparatorMenuItem())
 

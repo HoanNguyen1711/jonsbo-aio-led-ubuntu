@@ -1,0 +1,16 @@
+Package: rgbctl
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.10), python3-gi, gir1.2-gtk-4.0, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, udev, systemd
+Recommends: gnome-shell-extension-appindicator
+Installed-Size: @SIZE@
+Maintainer: HoanNguyen1711 <ngviethoan@gmail.com>
+Homepage: https://github.com/HoanNguyen1711/jonsbo-aio-led-ubuntu
+Description: LED control for Jonsbo AIO/fans, Gigabyte RGB Fusion 2 and Corsair DDR5
+ Small tool to control the ARGB headers and onboard LEDs of Gigabyte boards
+ with the ITE IT5711 controller (Jonsbo fans and AIO plug in here), Corsair
+ Vengeance RGB DDR5 memory over SMBus, and the CPU temperature display on
+ Jonsbo AIO pump blocks (USB 5131:2007). Includes a CLI, a GTK4 window, a tray
+ icon and a user daemon that keeps effects in sync across all devices.

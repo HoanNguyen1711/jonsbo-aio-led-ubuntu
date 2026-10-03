@@ -1,0 +1,52 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write  # tạo GitHub Release khi push tag
+
+jobs:
+  deb:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kiểm tra cú pháp
+        run: |
+          python3 -m compileall -q rgbctl
+          for f in build-deb.sh install.sh rgbctl.sh packaging/postinst packaging/prerm packaging/postrm; do
+            sh -n "$f"
+          done
+
+      - name: Tag phải khớp version trong code
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' rgbctl/__init__.py)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME khác version trong rgbctl/__init__.py ($version)"
+            exit 1
+          fi
+
+      - name: Build .deb
+        id: build
+        run: echo "deb=$(./build-deb.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Kiểm tra gói
+        run: |
+          dpkg-deb --info "${{ steps.build.outputs.deb }}"
+          dpkg-deb --contents "${{ steps.build.outputs.deb }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rgbctl-deb
+          path: dist/*.deb
+
+      - name: Tạo GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.deb --title "$GITHUB_REF_NAME" --generate-notes

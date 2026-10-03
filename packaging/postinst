@@ -1,0 +1,26 @@
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+    # bản cài kiểu cũ (install.sh trước 0.2) để file trong /etc, gói đã thay thế
+    for f in /etc/udev/rules.d/60-rgbctl.rules /etc/modules-load.d/rgbctl.conf; do
+        if [ -f "$f" ] && grep -qi "rgbctl\|i2c-dev" "$f"; then rm -f "$f"; fi
+    done
+
+    modprobe i2c-dev 2>/dev/null || true
+    if command -v udevadm >/dev/null; then
+        udevadm control --reload || true
+        udevadm trigger --subsystem-match=hidraw --subsystem-match=i2c-dev || true
+    fi
+    systemctl --global enable rgbctl-daemon.service >/dev/null 2>&1 || true
+    gtk-update-icon-cache -q -t /usr/share/icons/hicolor 2>/dev/null || true
+
+    echo ""
+    echo "rgbctl đã cài. Đăng xuất rồi đăng nhập lại để tray và daemon tự chạy,"
+    echo "hoặc chạy ngay:  systemctl --user start rgbctl-daemon && rgbctl tray &"
+    echo "Nếu trước đây cài bằng install.sh kiểu cũ:  rgbctl uninstall-legacy"
+    if ! grep -q "acpi_enforce_resources=lax" /proc/cmdline; then
+        echo ""
+        echo "RAM Corsair cần tham số kernel acpi_enforce_resources=lax (xem README)."
+    fi
+fi
+exit 0

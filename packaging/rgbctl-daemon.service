@@ -1,0 +1,10 @@
+[Unit]
+Description=rgbctl: màn hình nhiệt độ AIO + hiệu ứng LED đồng bộ
+
+[Service]
+ExecStart=/usr/bin/rgbctl daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

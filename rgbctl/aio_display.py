@@ -6,19 +6,12 @@ Protocol theo github.com/danieyal/jonsbolite (reverse-engineering/PROTOCOL.md):
 payload 64 byte, offset 0..2 = 00 01 02, 3 = nhiệt độ nguyên, 4 = phần trăm, 5 = đơn vị (0 = °C).
 Đã thử byte đơn vị (5) và chế độ hiển thị (40, 41): màn hình này bỏ qua, chỉ hiện ô 3.
 """
-import fcntl
 import glob
 import os
-import signal
-import subprocess
-import sys
-import time
 
 from . import core
 
 HID_ID = "HID_ID=0003:00005131:00002007"
-INTERVAL = 0.2
-
 DEFAULT = {"enabled": True}
 
 
@@ -33,65 +26,6 @@ def find_hidraw():
         if HID_ID in uevent and "HID_NAME=FBB" in uevent:
             return "/dev/" + os.path.basename(path)
     return None
-
-
-def is_running():
-    """PID của tiến trình `rgbctl aio-temp` đang chạy (không tính chính mình), hoặc None."""
-    for path in glob.glob("/proc/[0-9]*/cmdline"):
-        pid = int(path.split("/")[2])
-        if pid == os.getpid():
-            continue
-        try:
-            with open(path, "rb") as f:
-                args = f.read().split(b"\0")
-        except OSError:
-            continue
-        if b"aio-temp" in args and any(b"rgbctl" in a for a in args):
-            return pid
-    return None
-
-
-def start_background():
-    """Chạy `rgbctl aio-temp` tách khỏi tiến trình hiện tại. Trả về lỗi (str) hoặc None."""
-    dev = find_hidraw()
-    if not dev:
-        return "Không thấy màn hình AIO"
-    if not os.access(dev, os.W_OK):
-        return f"Không có quyền ghi {dev}. Chạy ./install.sh trước."
-    # tách hẳn để đóng GUI/tray vẫn tiếp tục chạy
-    subprocess.Popen(
-        [sys.executable, "-m", "rgbctl", "aio-temp"],
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        start_new_session=True,
-        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    return None
-
-
-def set_enabled(on):
-    """Bật/tắt hiển thị: lưu config và chạy/dừng tiến trình gửi. Trả về lỗi hoặc None."""
-    save_settings(enabled=on)
-    pid = is_running()
-    if on and not pid:
-        return start_background()
-    if not on and pid:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except PermissionError:
-            pass  # tiến trình của user khác: nó tự ngừng gửi vì đọc enabled=false
-    return None
-
-
-def _single_instance():
-    """Giữ khoá suốt đời tiến trình; False nếu đã có một `aio-temp` khác đang chạy."""
-    runtime = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
-    fd = os.open(os.path.join(runtime, "rgbctl-aio.lock"), os.O_RDWR | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        os.close(fd)
-        return False
-    return True
 
 
 def get_settings():
@@ -131,35 +65,15 @@ def send(fd, value):
     os.write(fd, b"\0" + bytes(p))
 
 
-def run(once=False):
-    """Gửi nhiệt độ CPU lên màn hình AIO mỗi 0.2s khi config `aio.enabled` bật
-    (chạy mãi nếu once=False)."""
-    temp_path = cpu_temp_path()
-    if not once and not _single_instance():
-        return None  # service và tray cùng khởi động lúc đăng nhập: chỉ một cái chạy
-    settings, settings_at = get_settings(), time.monotonic()
-    while True:
-        dev = find_hidraw()
-        if not dev:
-            if once:
-                raise RuntimeError("Không tìm thấy màn hình AIO Jonsbo (5131:2007)")
-            time.sleep(5)  # chờ thiết bị xuất hiện lại (vd sau khi sleep/resume)
-            continue
-        fd = os.open(dev, os.O_WRONLY)
-        try:
-            while True:
-                # đọc lại config mỗi giây để GUI đổi được mà không cần khởi động lại
-                if time.monotonic() - settings_at > 1:
-                    settings, settings_at = get_settings(), time.monotonic()
-                value = cpu_temp(temp_path)
-                if settings["enabled"] or once:
-                    send(fd, value)
-                if once:
-                    return value
-                time.sleep(INTERVAL)
-        except OSError:
-            if once:
-                raise
-            time.sleep(1)  # thiết bị bị rút/reset: mở lại
-        finally:
-            os.close(fd)
+def send_once():
+    """Gửi nhiệt độ CPU hiện tại một lần (để thử). Trả về nhiệt độ đã gửi."""
+    dev = find_hidraw()
+    if not dev:
+        raise RuntimeError("Không tìm thấy màn hình AIO Jonsbo (5131:2007)")
+    value = cpu_temp(cpu_temp_path())
+    fd = os.open(dev, os.O_WRONLY)
+    try:
+        send(fd, value)
+    finally:
+        os.close(fd)
+    return value
