@@ -1,3 +1,4 @@
+import os
 import sys
 import threading
 
@@ -188,6 +189,9 @@ class Window(Gtk.ApplicationWindow):
         GLib.timeout_add(500, lambda: self._aio_tick() and False)
 
 def main():
+    icons = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons")
+    Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(icons)
+    Gtk.Window.set_default_icon_name("rgbctl")
     app = Gtk.Application(application_id="dev.hoan.rgbctl")
     app.connect("activate", lambda a: Window(a).present())
     return app.run(sys.argv[:1])

@@ -1,3 +1,5 @@
+<img src="icons/rgbctl.svg" width="96" align="right" alt="">
+
 # jonsbo-aio-led-ubuntu (`rgbctl`)
 
 Tool nhỏ, gọn để điều khiển LED và màn hình nhiệt độ AIO trên Ubuntu, **không cần OpenRGB**:
@@ -87,7 +89,8 @@ cd jonsbo-aio-led-ubuntu
 **Trong thư mục home (không cần sudo):**
 
 4. `~/.local/bin/rgbctl`: symlink về thư mục repo (**đừng xoá/di chuyển thư mục repo**).
-5. `~/.local/share/applications/rgbctl.desktop`: icon **RGB Control** trong menu ứng dụng.
+5. `~/.local/share/icons/hicolor/…/rgbctl*.svg` và `~/.local/share/applications/dev.hoan.rgbctl.desktop`:
+   icon và mục **RGB Control** trong menu ứng dụng.
 6. `~/.config/autostart/rgbctl-tray.desktop`: tray tự chạy khi đăng nhập và áp dụng lại config.
 7. `~/.config/systemd/user/rgbctl-aio-temp.service`: gửi nhiệt độ CPU lên màn hình AIO.
 
@@ -298,7 +301,9 @@ chạy trước để các header riêng ghi đè lên. Đặt lại `mb` sẽ x
 systemctl --user disable --now rgbctl-aio-temp
 rm ~/.config/systemd/user/rgbctl-aio-temp.service \
    ~/.config/autostart/rgbctl-tray.desktop \
-   ~/.local/share/applications/rgbctl.desktop \
+   ~/.local/share/applications/dev.hoan.rgbctl.desktop \
+   ~/.local/share/icons/hicolor/scalable/apps/rgbctl.svg \
+   ~/.local/share/icons/hicolor/symbolic/apps/rgbctl-symbolic.svg \
    ~/.local/bin/rgbctl
 rm -r ~/.config/rgbctl
 sudo rm /etc/udev/rules.d/60-rgbctl.rules /etc/modules-load.d/rgbctl.conf
@@ -313,6 +318,7 @@ sudo udevadm control --reload
 ├── install.sh              # cài đặt cho user hiện tại
 ├── 60-rgbctl.rules         # udev: quyền truy cập thiết bị cho user đang đăng nhập
 ├── rgbctl.sh               # launcher (được symlink vào ~/.local/bin/rgbctl)
+├── icons/                  # icon app (màu) + icon tray (symbolic)
 └── rgbctl/
     ├── fusion.py           # Gigabyte RGB Fusion 2 / IT5711 qua hidraw
     ├── corsair_ram.py      # Corsair DDR5 qua SMBus

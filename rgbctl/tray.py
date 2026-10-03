@@ -19,6 +19,8 @@ COLORS = [
     ("Trắng", "ffffff"),
 ]
 
+ICONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons")
+
 _lock = threading.Lock()
 
 
@@ -67,9 +69,10 @@ def main():
         aio_display.start_background()
 
     ind = AppIndicator.Indicator.new(
-        "rgbctl", "preferences-desktop-color",
-        AppIndicator.IndicatorCategory.HARDWARE,
+        "rgbctl", "rgbctl-symbolic", AppIndicator.IndicatorCategory.HARDWARE,
     )
+    # lấy icon thẳng từ repo, không phụ thuộc đã cài icon vào theme hay chưa
+    ind.set_icon_theme_path(ICONS_DIR)
     ind.set_status(AppIndicator.IndicatorStatus.ACTIVE)
     ind.set_title("RGB Control")
 

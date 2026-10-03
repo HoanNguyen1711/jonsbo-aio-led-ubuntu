@@ -17,15 +17,21 @@ echo "→ lệnh ~/.local/bin/rgbctl"
 mkdir -p ~/.local/bin
 ln -sf "$DIR/rgbctl.sh" ~/.local/bin/rgbctl
 
-echo "→ icon trong menu ứng dụng"
-mkdir -p ~/.local/share/applications
-cat > ~/.local/share/applications/rgbctl.desktop <<DESK
+echo "→ icon + mục trong menu ứng dụng"
+ICONS=~/.local/share/icons/hicolor
+mkdir -p "$ICONS/scalable/apps" "$ICONS/symbolic/apps" ~/.local/share/applications
+cp "$DIR/icons/rgbctl.svg" "$ICONS/scalable/apps/rgbctl.svg"
+cp "$DIR/icons/rgbctl-symbolic.svg" "$ICONS/symbolic/apps/rgbctl-symbolic.svg"
+gtk-update-icon-cache -q -t "$ICONS" 2>/dev/null || true
+rm -f ~/.local/share/applications/rgbctl.desktop
+# tên file trùng app ID của GUI để GNOME gắn đúng icon cho cửa sổ
+cat > ~/.local/share/applications/dev.hoan.rgbctl.desktop <<DESK
 [Desktop Entry]
 Type=Application
 Name=RGB Control
 Comment=Điều khiển LED fan, AIO và RAM
 Exec=$HOME/.local/bin/rgbctl gui
-Icon=preferences-desktop-color
+Icon=rgbctl
 Categories=Utility;Settings;
 DESK
 
