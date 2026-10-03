@@ -24,6 +24,9 @@ REG_STATUS = 0x30
 REG_GET_CHECKSUM = 0x42
 REG_WRITE_CONFIGURATION = 0x82
 ID_EFFECT_CONFIGURATION = 1
+ID_COLOR_DATA = 2
+
+LED_COUNT = 10  # Vengeance RGB DDR5
 
 MODE_COLOR_SHIFT = 0x00
 MODE_COLOR_PULSE = 0x01
@@ -145,16 +148,26 @@ class CorsairRAM:
             r, g, b, brightness,
             r2, g2, b2, brightness,
         ]).ljust(20, b"\0")
+        return self._write_buffer(data, ID_EFFECT_CONFIGURATION)
+
+    def set_colors(self, color, brightness=255):
+        """Ghi bộ đệm màu từng LED. Chế độ MODE_STATIC lấy màu từ đây, không phải từ
+        gói hiệu ứng (thiếu bước này RAM sẽ sáng trắng)."""
+        r, g, b = (c * brightness // 255 for c in color)
+        return self._write_buffer(bytes([r, g, b, 0xFF]) * LED_COUNT, ID_COLOR_DATA)
+
+    def _write_buffer(self, data, buffer_id):
+        """Ghi `data` vào buffer tạm, so CRC-8 với thiết bị rồi áp dụng vào `buffer_id`."""
         expected = crc8(data)
         ok = True
         for addr in self.sticks:
-            for attempt in range(3):
+            for _attempt in range(3):
                 self.bus.write(addr, REG_RESET_BUFFER, 0)
                 self.bus.write(addr, REG_BINARY_START, 0)
                 for byte in data:
                     self.bus.write(addr, REG_SET_BINARY_DATA, byte)
                 if self.bus.read(addr, REG_GET_CHECKSUM) == expected:
-                    self.bus.write(addr, REG_WRITE_CONFIGURATION, ID_EFFECT_CONFIGURATION)
+                    self.bus.write(addr, REG_WRITE_CONFIGURATION, buffer_id)
                     self._wait_ready(addr)
                     break
             else:

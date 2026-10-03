@@ -89,6 +89,8 @@ def apply(target, mode, color="ffffff", speed=3, brightness=100, save_flash=Fals
                 _RAM_EFFECT[mode], rgb, speed=rspeed, brightness=bright,
                 random=(mode in ("cycle", "rainbow")),
             )
+            if ok and mode == "static":  # gồm cả "off" (đã đổi thành static đen ở trên)
+                ok = dev.set_colors(rgb, bright)
             if not ok:
                 raise RuntimeError("RAM không xác nhận dữ liệu (CRC sai)")
     else:

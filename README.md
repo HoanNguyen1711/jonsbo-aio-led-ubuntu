@@ -59,7 +59,8 @@ của main.
 | Fan/AIO/main: **Cầu vồng** (rainbow) | ✅ đã kiểm chứng |
 | Fan/AIO/main: chế độ direct (màu từng LED) | ✅ đã kiểm chứng (dùng nội bộ khi debug) |
 | Fan/AIO/main: **Thở / Nháy / Đổi màu** | ⚠️ đã cài đặt, chưa kiểm chứng trên máy thật |
-| RAM Corsair (mọi hiệu ứng) | ⚠️ đã cài đặt, chưa chạy thử được (cần [bật SMBus](#bật-smbus-cho-ram-làm-1-lần)) |
+| RAM Corsair: **Tĩnh / Tắt / Cầu vồng** | ✅ đã kiểm chứng (cần [bật SMBus](#bật-smbus-cho-ram-làm-1-lần)) |
+| RAM Corsair: **Thở / Nháy / Đổi màu** | ⚠️ đã cài đặt, chưa kiểm chứng |
 | Màn hình AIO hiện nhiệt độ CPU | ✅ đã kiểm chứng |
 | GUI GTK4 | ✅ |
 | Icon tray | ⚠️ đã cài đặt, cần gói `gir1.2-ayatanaappindicator3-0.1` (install.sh tự cài) |
@@ -270,6 +271,9 @@ chạy trước để các header riêng ghi đè lên. Đặt lại `mb` sẽ x
   bằng thanh ghi `0x43 ∈ {1A,1B,1C}` và `0x44 ∈ {01,03,04}`.
 - Đặt hiệu ứng: reset buffer (`0x0B`), bắt đầu (`0x21`), ghi 20 byte cấu hình qua `0x20`, đọc
   checksum CRC-8 ở `0x42` để so, khớp thì ghi `0x82 = 1` để áp dụng. Lệch thì thử lại tối đa 3 lần.
+- **Chế độ tĩnh (`0x10`) không lấy màu trong gói hiệu ứng** mà lấy từ bộ đệm màu từng LED:
+  ghi `10 LED × (R, G, B, FF)` theo cùng cách trên rồi `0x82 = 2`. Thiếu bước này RAM sáng
+  trắng (màu mặc định). "Tắt" là chế độ tĩnh với màu đen.
 
 ### Màn hình AIO Jonsbo (`rgbctl/aio_display.py`)
 
