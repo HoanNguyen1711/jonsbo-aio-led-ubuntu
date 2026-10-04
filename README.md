@@ -199,11 +199,23 @@ rgbctl --version
 
 ### GUI
 
-`rgbctl gui`, hoặc mở **RGB Control** trong menu ứng dụng.
+`rgbctl gui`, hoặc mở **RGB Control** trong menu ứng dụng. Mở app thì tray cũng tự bật.
 
-- **Thiết bị / Hiệu ứng / Màu / Tốc độ / Độ sáng** rồi bấm **Áp dụng**. Bấm vào ô màu có sẵn là
-  áp dụng ngay.
-- **Lưu vào main**: tương đương `--flash`.
+```
+Thiết bị   [✓] Fan + AIO   [✓] RAM   [✓] Card đồ hoạ
+Hiệu ứng   [ Cầu vồng ▾ ]
+Màu        [■]  ● ● ● ● ● ● ● ● ●
+Tốc độ     ───●───
+Độ sáng    ──────●
+           [ Lưu vào main ]
+```
+
+- **Mọi thay đổi áp dụng ngay** cho các thiết bị đang tick. Thanh kéo chờ dừng tay ~0,3 giây.
+- Tick thêm một thiết bị thì nó nhận hiệu ứng đang chọn; bỏ tick thì nó giữ nguyên trạng thái.
+  "Fan + AIO" gồm cả 3 header ARGB và LED trên main (chỉnh riêng từng header: CLI `-t argb1`…).
+- Ô màu mờ đi với Đổi màu / Cầu vồng / Tắt; tốc độ mờ đi với Tĩnh / Tắt.
+- **Lưu vào main**: ghi hiệu ứng của Fan + AIO vào flash của mainboard (tương đương `--flash`),
+  chỉ bấm được với Tĩnh / Cầu vồng / Tắt.
 - Mục **Màn hình AIO**: công tắc **Hiển thị** bật/tắt việc gửi nhiệt độ lên màn hình.
 
 ### Tray
