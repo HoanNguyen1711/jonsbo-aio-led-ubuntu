@@ -2,8 +2,8 @@
 
 - gửi nhiệt độ CPU lên màn hình AIO (5 Hz) khi config `aio.enabled` bật;
 - chạy các hiệu ứng phần mềm (thở / nháy / đổi màu, xem effects.py) ~30 khung hình/giây
-  cho fan/AIO (chế độ direct của IT5711) và RAM (chế độ direct của Corsair), tất cả cùng
-  một đồng hồ nên khớp nhau.
+  cho fan/AIO/LED main (lệnh "tĩnh + màu" của IT5711), RAM (chế độ direct của Corsair) và
+  card Colorful, tất cả cùng một đồng hồ nên khớp nhau.
 
 Hiệu ứng tĩnh / cầu vồng / tắt vẫn do chip tự chạy; daemon không đụng tới các vùng đó.
 """
@@ -14,9 +14,12 @@ import subprocess
 import sys
 import time
 
-from . import aio_display, core, corsair_ram, effects, fusion
+from . import aio_display, colorful_gpu, core, corsair_ram, effects, fusion
 
 FPS = 30
+# Driver NVIDIA chờ bus I2C bằng cách chạy CPU suốt lúc truyền (~3.3 ms CPU mỗi lệnh):
+# 30 lần/giây tốn ~10% một nhân. Card chỉ có một vùng màu nên 12 lần/giây là đủ mượt.
+GPU_FPS = 12
 AIO_INTERVAL = 0.2
 RETRY = 10  # giây, mở lại thiết bị bị lỗi
 
@@ -143,13 +146,15 @@ def run():
     temp_path = aio_display.cpu_temp_path()
     mb = _Lazy(fusion.Fusion2)
     ram = _Lazy(corsair_ram.CorsairRAM)
+    gpu = _Lazy(colorful_gpu.ColorfulGPU)
     aio = _Lazy(_AioDev)
 
     cfg_mtime = None
     plan = {}  # vùng -> state hiệu ứng phần mềm ("ram" là RAM)
-    direct_set = None  # bộ header ARGB đã chuyển sang direct
+    builtin_ok = False  # đã bảo đảm các header ARGB chạy hiệu ứng của chip (không direct)
     last = {}  # vùng -> màu đã gửi, chỉ gửi khi đổi
     aio_enabled, aio_next = True, 0.0
+    gpu_next = 0.0
 
     while True:
         frame_start = time.monotonic()
@@ -164,41 +169,51 @@ def run():
             cfg = core.load_config()
             plan = core.software_plan(cfg)
             aio_enabled = {**aio_display.DEFAULT, **cfg.get("aio", {})}["enabled"]
-            direct_set, last = None, {}
+            last = {}
 
         # hiệu ứng phần mềm
         if plan:
             t = time.time()  # đồng hồ chung cho mọi thiết bị
-            fusion_zones = [z for z in plan if z != "ram"]
+            fusion_zones = [z for z in plan if z in fusion.ZONES]
             if fusion_zones and (dev := mb.get()):
                 try:
-                    argb = sorted(z for z in fusion_zones if fusion.ZONES[z][1])
-                    if direct_set != argb:
-                        dev.set_direct_headers(argb)
-                        direct_set, last = argb, {}
+                    if not builtin_ok:
+                        # tắt chế độ direct nếu bản cũ để lại, để lệnh hiệu ứng có tác dụng
+                        dev.set_direct_headers([])
+                        builtin_ok = True
+                    # Tô bằng lệnh "tĩnh + màu" cho mọi vùng trong một lượt (~25 ms). Chế độ direct
+                    # cần 4 gói mỗi header (~93 ms/khung) và đổi qua lại với hiệu ứng của chip làm
+                    # đèn chớp lúc chuyển từ cầu vồng sang.
+                    groups = {}
                     for z in fusion_zones:
                         st = plan[z]
                         c = effects.color_at(t, st["mode"], core.parse_color(st["color"]),
                                              st["speed"], st["brightness"])
                         if last.get(z) != c:
-                            if z in argb:
-                                dev.set_direct_color(z, c)
-                            else:
-                                dev.send_effects([z], fusion.EFFECT_STATIC, c)
+                            groups.setdefault(c, []).append(z)
+                    for c, zones in groups.items():
+                        dev.send_effects(zones, fusion.EFFECT_STATIC, c)
+                        for z in zones:
                             last[z] = c
                 except OSError:
                     mb.fail()
-                    direct_set = None
-            if "ram" in plan and (dev := ram.get()):
-                st = plan["ram"]
-                c = effects.color_at(t, st["mode"], core.parse_color(st["color"]),
-                                     st["speed"], st["brightness"])
-                if last.get("ram") != c:
-                    try:
-                        dev.set_direct(c)
-                        last["ram"] = c
-                    except OSError:
-                        ram.fail()
+                    builtin_ok = False
+            gpu_due = frame_start >= gpu_next
+            if gpu_due:
+                gpu_next = frame_start + 1 / GPU_FPS
+            for name, lazy, send in (("ram", ram, "set_direct"), ("gpu", gpu, "set_color")):
+                if name == "gpu" and not gpu_due:
+                    continue
+                if name in plan and (dev := lazy.get()):
+                    st = plan[name]
+                    c = effects.color_at(t, st["mode"], core.parse_color(st["color"]),
+                                         st["speed"], st["brightness"])
+                    if last.get(name) != c:
+                        try:
+                            getattr(dev, send)(c)
+                            last[name] = c
+                        except OSError:
+                            lazy.fail()
 
         # màn hình AIO
         if aio_enabled and frame_start >= aio_next and (h := aio.get()):

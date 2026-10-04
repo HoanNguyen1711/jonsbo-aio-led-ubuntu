@@ -4,8 +4,8 @@ import os
 
 import time
 
+from . import colorful_gpu, effects, fusion
 from . import corsair_ram as ram
-from . import effects, fusion
 
 MODES = ["static", "breathing", "flash", "cycle", "rainbow", "off"]
 MODE_LABELS = {
@@ -25,7 +25,17 @@ TARGETS = {
     "argb3": ["argb3"],
     "board": ["chipset", "led_c"],
     "ram": None,
+    "gpu": None,
 }
+
+# "all" trong CLI/GUI/tray
+ALL_TARGETS = ["mb", "ram", "gpu"]
+
+
+def is_software(target, mode):
+    """Hiệu ứng này do daemon chạy (gửi màu liên tục) hay do chip tự chạy.
+    Card Colorful không có hiệu ứng trong chip nên cầu vồng trên card cũng do daemon."""
+    return mode in effects.SOFTWARE_MODES or (target == "gpu" and mode == "rainbow")
 
 _FUSION_EFFECT = {
     "static": fusion.EFFECT_STATIC,
@@ -87,9 +97,10 @@ def _zone_states(cfg):
 def software_plan(cfg):
     """Vùng nào đang dùng hiệu ứng phần mềm (daemon chạy): {vùng | "ram": state}."""
     plan = {z: {**DEFAULT_STATE, **st} for z, st in _zone_states(cfg).items()}
-    if "ram" in cfg:
-        plan["ram"] = {**DEFAULT_STATE, **cfg["ram"]}
-    return {z: st for z, st in plan.items() if st["mode"] in effects.SOFTWARE_MODES}
+    for target in ("ram", "gpu"):
+        if target in cfg:
+            plan[target] = {**DEFAULT_STATE, **cfg[target]}
+    return {z: st for z, st in plan.items() if is_software(z, st["mode"])}
 
 
 def _validate(target, mode):
@@ -99,8 +110,7 @@ def _validate(target, mode):
         raise ValueError(f"Hiệu ứng không hợp lệ: {mode} (chọn: {', '.join(MODES)})")
 
 
-def _apply_hardware(target, mode, color="ffffff", speed=3, brightness=100, save_flash=False,
-                    direct_zones=()):
+def _apply_hardware(target, mode, color="ffffff", speed=3, brightness=100, save_flash=False):
     """Đặt hiệu ứng do chip tự chạy (tĩnh / cầu vồng / tắt). speed 1..5, brightness 0..100."""
     rgb = parse_color(color)
     speed = max(1, min(5, int(speed)))
@@ -108,7 +118,10 @@ def _apply_hardware(target, mode, color="ffffff", speed=3, brightness=100, save_
     if mode == "off":
         mode, rgb, bright = "static", (0, 0, 0), 0
 
-    if target == "ram":
+    if target == "gpu":
+        with colorful_gpu.ColorfulGPU() as dev:
+            dev.set_color(tuple(c * bright // 255 for c in rgb))
+    elif target == "ram":
         with ram.CorsairRAM() as dev:
             # RAM chỉ có 3 mức tốc độ
             rspeed = 0 if speed <= 2 else (1 if speed == 3 else 2)
@@ -122,8 +135,7 @@ def _apply_hardware(target, mode, color="ffffff", speed=3, brightness=100, save_
                 raise RuntimeError("RAM không xác nhận dữ liệu (CRC sai)")
     else:
         with fusion.Fusion2() as dev:
-            dev.set_effect(TARGETS[target], _FUSION_EFFECT[mode], rgb, speed, bright,
-                           direct_zones=direct_zones)
+            dev.set_effect(TARGETS[target], _FUSION_EFFECT[mode], rgb, speed, bright)
             if save_flash:
                 dev.save_to_flash()
 
@@ -138,7 +150,7 @@ def set_state(target, state, save=True, save_flash=False):
 
     state = {**DEFAULT_STATE, **state}
     _validate(target, state["mode"])
-    software = state["mode"] in effects.SOFTWARE_MODES
+    software = is_software(target, state["mode"])
     if software and not save:
         raise ValueError("Thở / nháy / đổi màu do daemon chạy theo config, không dùng được --no-save")
     if save:
@@ -148,24 +160,21 @@ def set_state(target, state, save=True, save_flash=False):
         return
     if save and daemon.is_running():
         time.sleep(0.15)  # chờ daemon đọc config mới và thôi gửi màu cho vùng này
-    plan = software_plan(load_config())
-    _apply_hardware(target, **state, save_flash=save_flash,
-                    direct_zones=[z for z in plan if z != "ram"])
+    _apply_hardware(target, **state, save_flash=save_flash)
 
 
 def apply_config(cfg=None):
     """Áp dụng toàn bộ config đã lưu (lúc đăng nhập). Trả về danh sách (target, lỗi)."""
     cfg = load_config() if cfg is None else cfg
     plan = software_plan(cfg)
-    direct = [z for z in plan if z != "ram"]
     errors = []
     # "mb" trước để các header riêng lẻ ghi đè lên sau; bỏ qua khoá khác như "aio"
     for target in sorted((t for t in cfg if t in TARGETS), key=lambda t: (t != "mb", t)):
         state = {**DEFAULT_STATE, **cfg[target]}
-        if state["mode"] in effects.SOFTWARE_MODES:
+        if is_software(target, state["mode"]):
             continue
         try:
-            _apply_hardware(target, **state, direct_zones=direct)
+            _apply_hardware(target, **state)
         except Exception as e:  # noqa: BLE001 - báo lỗi từng thiết bị, không dừng cả loạt
             errors.append((target, e))
     if plan:

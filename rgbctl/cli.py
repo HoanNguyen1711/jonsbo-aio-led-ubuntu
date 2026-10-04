@@ -1,10 +1,10 @@
 import argparse
 import sys
 
-from . import __version__, aio_display, core, corsair_ram, daemon, fusion
+from . import __version__, aio_display, colorful_gpu, core, corsair_ram, daemon, fusion
 
 EPILOG = """ví dụ:
-  rgbctl set static ff0000              # tất cả (main + RAM) màu đỏ
+  rgbctl set static ff0000              # tất cả (main + RAM + card đồ hoạ) màu đỏ
   rgbctl set breathing 00aaff -t ram    # chỉ RAM, hiệu ứng thở
   rgbctl set rainbow -t argb1 -s 5      # header ARGB_V2_1 cầu vồng nhanh
   rgbctl off                            # tắt hết
@@ -28,6 +28,11 @@ def cmd_info(_args):
             print(f"RAM  : {len(dev.sticks)} thanh Corsair ({addrs})")
     except Exception as e:
         print(f"RAM  : lỗi - {e}")
+    try:
+        with colorful_gpu.ColorfulGPU() as dev:
+            print(f"GPU  : đèn card Colorful tại {dev.dev}, địa chỉ 0x{colorful_gpu.ADDR:02x}")
+    except Exception as e:
+        print(f"GPU  : lỗi - {e}")
     dev = aio_display.find_hidraw()
     print(f"AIO  : màn hình nhiệt độ tại {dev}" if dev else "AIO  : không thấy màn hình nhiệt độ")
     print(f"Config: {core.CONFIG_PATH}")
@@ -46,7 +51,7 @@ def _apply_targets(targets, state, save_flash, remember):
 
 
 def _targets(t):
-    return ["mb", "ram"] if t == "all" else [t]
+    return core.ALL_TARGETS if t == "all" else [t]
 
 
 def cmd_set(args):

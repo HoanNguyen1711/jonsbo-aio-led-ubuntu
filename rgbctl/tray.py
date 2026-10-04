@@ -43,10 +43,10 @@ def _apply_all(mode, color=None):
 
     def work():
         with _lock:
-            for t in ("mb", "ram"):
+            for t in core.ALL_TARGETS:
                 try:
                     core.set_state(t, state)
-                except Exception as e:  # noqa: BLE001 - RAM có thể chưa bật SMBus
+                except Exception as e:  # noqa: BLE001 - RAM chưa bật SMBus, không có card...
                     print(f"rgbctl tray: {t}: {e}", file=sys.stderr)
 
     threading.Thread(target=work, daemon=True).start()

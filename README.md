@@ -7,10 +7,11 @@ Tool nhỏ, gọn để điều khiển LED và màn hình nhiệt độ AIO tr�
 - **Fan + LED AIO Jonsbo** (cắm vào header ARGB của main Gigabyte)
 - **LED trên main Gigabyte** (chip ITE IT5711 – RGB Fusion 2)
 - **RAM Corsair Vengeance RGB DDR5**
+- **Đèn trang trí trên card đồ hoạ Colorful** (đã thử: iGame RTX 5070 Battle-AX)
 - **Màn hình nhiệt độ trên block AIO Jonsbo** (hiện nhiệt độ CPU)
 
 Có 3 cách dùng: dòng lệnh (`rgbctl`), cửa sổ GTK4 và icon trên thanh trên cùng (tray).
-Hiệu ứng thở / nháy / đổi màu **chạy đồng bộ** trên fan, AIO và RAM. Viết bằng Python thuần,
+Hiệu ứng thở / nháy / đổi màu **chạy đồng bộ** trên fan, AIO, RAM và card đồ hoạ. Viết bằng Python thuần,
 nói chuyện trực tiếp với `/dev/hidraw*` và `/dev/i2c-*`. Cài bằng gói `.deb`.
 
 > Tool này viết cho một cấu hình cụ thể (bên dưới). Máy khác dùng chip IT5711 / RAM Corsair
@@ -43,6 +44,7 @@ nói chuyện trực tiếp với `/dev/hidraw*` và `/dev/i2c-*`. Cài bằng g
 | Fan case | Jonsbo ARGB (5V 3 pin) | header ARGB_V2_x của main |
 | AIO | Jonsbo, LED ARGB + màn hình 2 số | LED: header ARGB của main · màn hình: USB `5131:2007` |
 | RAM | Corsair Vengeance RGB DDR5 `CMH96GX5M2E6000C36` (2 thanh, fw 1.2.9, protocol 4) | SMBus AMD PIIX4, địa chỉ `0x18–0x1F` |
+| Card đồ hoạ | Colorful iGame RTX 5070 Battle-AX (PCI `10de:2f04`, subsystem `7377:2000`) | I2C nội bộ của card (`NVIDIA i2c adapter 1`), địa chỉ `0x61` |
 | CPU | AMD Ryzen 7 9700X | nhiệt độ đọc từ `k10temp` (Tctl) |
 | OS | Ubuntu, GNOME (Wayland), kernel 7.0 | |
 
@@ -58,6 +60,7 @@ của main.
 | Fan/AIO/main/RAM: **Tĩnh, Tắt, Cầu vồng** (chip tự chạy) | ✅ đã kiểm chứng |
 | Fan/AIO/main/RAM: **Thở** (daemon, đồng bộ mọi thiết bị) | ✅ đã kiểm chứng |
 | Fan/AIO/main/RAM: **Nháy, Đổi màu** (daemon) | ⚠️ cùng cơ chế với Thở, chưa kiểm chứng bằng mắt |
+| Card Colorful: **đặt màu, đổi màu toàn bộ** | ✅ đã kiểm chứng; đèn chỉ có một vùng màu nên "cầu vồng" trên card là đổi màu toàn bộ |
 | Màn hình AIO hiện nhiệt độ CPU | ✅ đã kiểm chứng |
 | Gói `.deb`, chuyển từ bản cài cũ | ✅ đã kiểm chứng |
 | GUI GTK4 | ✅ |
@@ -94,7 +97,7 @@ Gói cài các file sau:
 | Đường dẫn | Tác dụng |
 |---|---|
 | `/usr/bin/rgbctl`, `/usr/lib/rgbctl/` | lệnh và code |
-| `/usr/lib/udev/rules.d/60-rgbctl.rules` | cho user đang đăng nhập truy cập chip LED, SMBus khe RAM, màn hình AIO mà không cần sudo |
+| `/usr/lib/udev/rules.d/60-rgbctl.rules` | cho user đang đăng nhập truy cập chip LED, SMBus khe RAM, bus I2C của card Colorful, màn hình AIO mà không cần sudo |
 | `/usr/lib/modules-load.d/rgbctl.conf` | nạp `i2c-dev` khi khởi động |
 | `/usr/lib/systemd/user/rgbctl-daemon.service` | daemon (bật sẵn cho mọi user): màn hình AIO + hiệu ứng đồng bộ |
 | `/etc/xdg/autostart/rgbctl-tray.desktop` | tray tự chạy khi đăng nhập, áp dụng lại màu đã lưu |
@@ -166,15 +169,15 @@ rgbctl --version
 
 | Hiệu ứng | Ai chạy | Ghi chú |
 |---|---|---|
-| `static`, `rainbow`, `off` | chip trên từng thiết bị | vẫn chạy khi daemon tắt |
-| `breathing`, `flash`, `cycle` | daemon (~30 khung hình/giây) | đồng bộ hoàn toàn giữa fan, AIO, 2 thanh RAM; đèn đứng yên nếu daemon tắt |
+| `static`, `rainbow`, `off` | chip trên từng thiết bị | vẫn chạy khi daemon tắt; riêng `rainbow` trên card đồ hoạ do daemon chạy |
+| `breathing`, `flash`, `cycle` | daemon (~30 khung hình/giây) | đồng bộ hoàn toàn giữa fan, AIO, 2 thanh RAM, card đồ hoạ; đèn đứng yên nếu daemon tắt |
 
 **Tuỳ chọn của `set` / `off`:**
 
 | Tuỳ chọn | Ý nghĩa | Mặc định |
 |---|---|---|
 | `color` | màu hex, ví dụ `ff8800` (bỏ qua với `cycle`/`rainbow`) | `ffffff` |
-| `-t, --target` | `all`, `mb`, `argb1`, `argb2`, `argb3`, `board`, `ram` | `all` |
+| `-t, --target` | `all`, `mb`, `argb1`, `argb2`, `argb3`, `board`, `ram`, `gpu` | `all` |
 | `-s, --speed` | 1 (chậm) … 5 (nhanh) | 3 |
 | `-b, --brightness` | 0 … 100 | 100 |
 | `--flash` | ghi vào flash của main, nên màu giữ cả lúc boot trước khi đăng nhập (chỉ với `static`/`rainbow`/`off`) | tắt |
@@ -184,11 +187,12 @@ rgbctl --version
 
 | Target | Gồm |
 |---|---|
-| `all` | `mb` + `ram` |
+| `all` | `mb` + `ram` + `gpu` |
 | `mb` | mọi vùng trên main: 3 header ARGB + LED onboard |
 | `argb1` / `argb2` / `argb3` | header ARGB_V2_1 / _2 / _3 |
 | `board` | LED onboard (Chipset Accent, LED_C) |
 | `ram` | tất cả thanh RAM Corsair tìm thấy |
+| `gpu` | đèn trang trí trên card đồ hoạ Colorful |
 
 > `--flash` ghi vào bộ nhớ flash của chip trên main. Flash có giới hạn số lần ghi, nên chỉ dùng
 > khi đã chốt màu, đừng dùng trong script chạy liên tục.
@@ -226,8 +230,10 @@ Cần extension **Ubuntu AppIndicators** (Ubuntu bật sẵn).
 
 1. **Màn hình AIO:** màn hình không tự đo nhiệt độ, nên daemon gửi nhiệt độ CPU 5 lần/giây.
    Không có ai gửi thì màn hình trống.
-2. **Hiệu ứng thở / nháy / đổi màu:** tính màu theo một đồng hồ chung rồi gửi thẳng cho fan,
-   AIO (chế độ direct của IT5711) và RAM (chế độ direct của Corsair).
+2. **Hiệu ứng thở / nháy / đổi màu:** tính màu theo một đồng hồ chung rồi gửi cho fan, AIO,
+   LED main (lệnh "tĩnh + màu" của IT5711, 30 lần/giây), RAM (chế độ direct của Corsair,
+   30 lần/giây) và card đồ hoạ (12 lần/giây). Tốn khoảng 8% một nhân CPU khi đang chạy hiệu ứng,
+   gần như 0 khi không.
 
 Daemon đọc lại config mỗi khi file đổi, nên đổi màu trong GUI/tray/CLI là có tác dụng ngay.
 Khi không có hiệu ứng nào cần chạy, daemon chỉ thức 5 lần/giây cho màn hình AIO.
@@ -267,10 +273,10 @@ chạy trước để các header riêng ghi đè lên. Đặt lại `mb` sẽ x
 - `CC 20+n …`: hiệu ứng phần cứng cho vùng `n`. Gói gồm loại hiệu ứng, độ sáng, màu
   (`0x00RRGGBB`), 4 chu kỳ thời gian và 4 tham số. Sau đó gửi `CC 28 <mask>` để áp dụng.
   - Vùng trên B850M GAMING X WIFI6E: `argb1`=5, `argb2`=6, `argb3`=7, Chipset Accent=2, LED_C=4.
-- `CC 32 <mask>`: header ARGB nào có bit = 1 thì chạy chế độ direct (máy gửi màu), còn lại chạy
-  hiệu ứng built-in. Lệnh này đặt cả mask một lần, nên mask luôn được tính từ config.
-- `CC 58/59/62 <offset> <số byte> <màu…>`: chế độ direct, tối đa 19 LED mỗi gói, cho header
-  ARGB 1/2/3.
+- `CC 32 <mask>`: header ARGB nào có bit = 1 thì chạy chế độ direct (máy gửi màu từng LED qua
+  `CC 58/59/62`, tối đa 19 LED mỗi gói), còn lại chạy hiệu ứng của chip. rgbctl luôn để mask = 0:
+  hiệu ứng phần mềm được tô bằng lệnh "tĩnh + màu" cho cả 5 vùng một lượt (~25 ms), nhanh hơn
+  direct (~93 ms/khung cho 3 header × 64 LED) và không làm đèn chớp khi chuyển từ cầu vồng sang.
 - `CC 34 …`: số LED tối đa mỗi header.
 - `CC 47 1` + `CC 5E`: lưu trạng thái vào flash.
 
@@ -294,6 +300,21 @@ chạy trước để các header riêng ghi đè lên. Đặt lại `mb` sẽ x
 - **Chế độ direct** (protocol ≥ 4): ghi một khối SMBus 32 byte `[10, R,G,B × 10, CRC-8]` vào
   `0x31`. Mất khoảng 4 ms mỗi thanh, nên daemon chạy được 30 khung hình/giây.
 
+### Card đồ hoạ Colorful (`rgbctl/colorful_gpu.py`)
+
+- Chip LED ở địa chỉ `0x61` trên bus I2C nội bộ của card (`NVIDIA i2c adapter 1`). Bus được
+  tìm theo tên và mã PCI (`10de` + subsystem vendor `7377` của Colorful), không theo số `i2c-N`
+  vì số này đổi sau mỗi lần khởi động.
+- Nhận diện (protocol của OpenRGB `ColorfulGPUController`): đọc thử 1 byte xem có chip không,
+  rồi ghi `AA EF 81 02 1C 02`, chip đúng trả về `AA EF 81 …`.
+- Đặt màu: `AA EF 12 03 01 FF R G B` + tổng các byte (16 bit, little endian).
+- Gói màu từng LED của dòng Vulcan/Neptune (`AA EF 01 04 88 26` + 38 LED) bị chip trên Battle-AX
+  bỏ qua, nên đèn chỉ có một vùng màu. Hiệu ứng mặc định (đỏ chớp) do chip chạy nhưng lệnh của
+  nó chưa được giải mã; mọi hiệu ứng động trên card do daemon gửi màu liên tục (~18 lệnh/giây
+  đã thử ổn định).
+- Bus này còn có chip điều áp của card: chỉ ghi vào `0x61`, và chỉ sau khi nhận diện đúng chip.
+  Địa chỉ `0x50` (card đời 20) không bao giờ được thử vì trên bus nối ra màn hình đó là EEPROM EDID.
+
 ### Màn hình AIO Jonsbo (`rgbctl/aio_display.py`)
 
 - USB HID `5131:2007`, tên `FBB`, usage page `0xFF00`, **không có report ID**, output report
@@ -303,6 +324,9 @@ chạy trước để các header riêng ghi đè lên. Đặt lại `mb` sẽ x
 - Nhiệt độ đọc từ `k10temp` `temp1_input` (Tctl).
 
 ### Daemon (`rgbctl/daemon.py`, `rgbctl/effects.py`)
+
+- Driver NVIDIA chờ bus I2C bằng cách chạy CPU suốt lúc truyền (~3.3 ms CPU mỗi lệnh), nên card
+  đồ hoạ chỉ được cập nhật 12 lần/giây thay vì 30.
 
 - Chip trên main và chip trên RAM có đồng hồ riêng, nên hiệu ứng phần cứng không bao giờ khớp
   nhau. Hai thanh RAM được ghi lần lượt nên cũng lệch pha. Vì vậy thở / nháy / đổi màu được tính
@@ -319,6 +343,7 @@ chạy trước để các header riêng ghi đè lên. Đặt lại `mb` sẽ x
 |---|---|
 | `Permission denied: '/dev/hidrawN'` | đăng xuất/đăng nhập lại sau khi cài gói; hoặc `sudo udevadm trigger` |
 | `RAM : Không thấy SMBus PIIX4` | chưa thêm `acpi_enforce_resources=lax`, xem [phần trên](#bật-smbus-cho-ram-làm-1-lần) |
+| `GPU : Không tìm thấy đèn card Colorful` | card không phải Colorful, hoặc driver NVIDIA không mở bus I2C (`ls /sys/class/i2c-dev/*/name` phải có "NVIDIA i2c adapter") |
 | `RAM : Không tìm thấy thanh RAM Corsair RGB nào` | thử `sudo apt install i2c-tools && sudo i2cdetect -y <bus>` để xem địa chỉ nào trả lời |
 | Đặt hiệu ứng xong fan/AIO tắt hẳn | báo lại hiệu ứng nào (xem mục phát hiện ở trên). Thử `rgbctl set static ff0000 -t mb` để chắc kết nối vẫn ổn |
 | Thở/nháy/đổi màu đứng yên | daemon không chạy: `systemctl --user status rgbctl-daemon` |
@@ -352,6 +377,7 @@ gói (chưa có udev rule) thì cần `sudo`. GUI và tray không chạy đượ
 └── rgbctl/
     ├── fusion.py           # Gigabyte RGB Fusion 2 / IT5711 qua hidraw
     ├── corsair_ram.py      # Corsair DDR5 qua SMBus
+    ├── colorful_gpu.py     # đèn card đồ hoạ Colorful qua I2C của card
     ├── aio_display.py      # màn hình nhiệt độ AIO Jonsbo
     ├── effects.py          # hiệu ứng do phần mềm tính (thở / nháy / đổi màu)
     ├── daemon.py           # tiến trình nền: màn hình AIO + hiệu ứng đồng bộ
@@ -371,8 +397,8 @@ gói (chưa có udev rule) thì cần `sudo`. GUI và tray không chạy đượ
 ## Ghi công
 
 - [OpenRGB](https://gitlab.com/CalcProgrammer1/OpenRGB): protocol Gigabyte RGB Fusion 2 USB
-  (`GigabyteRGBFusion2USBController`) và Corsair DRAM (`CorsairDRAMController`) được tham khảo
-  từ source OpenRGB.
+  (`GigabyteRGBFusion2USBController`), Corsair DRAM (`CorsairDRAMController`) và Colorful GPU
+  (`ColorfulGPUController`) được tham khảo từ source OpenRGB.
 - [danieyal/jonsbolite](https://github.com/danieyal/jonsbolite): tài liệu reverse-engineering
   protocol màn hình Jonsbo `5131:2007`.
 - [htkhiem/jonsbo-th-linux](https://github.com/htkhiem/jonsbo-th-linux): gợi ý ban đầu rằng

@@ -18,6 +18,8 @@ _PERIOD = {
 
 def color_at(t, mode, color, speed, brightness):
     """Màu (r, g, b) tại thời điểm t (giây). color: (r, g, b); speed 1..5; brightness 0..100."""
+    if mode == "rainbow":  # chỉ gặp ở thiết bị một vùng màu (card Colorful): đổi màu toàn bộ
+        mode = "cycle"
     period = _PERIOD[mode][max(1, min(5, int(speed))) - 1]
     phase = (t % period) / period
     if mode == "breathing":

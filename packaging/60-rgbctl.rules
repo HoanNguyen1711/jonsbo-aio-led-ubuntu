@@ -5,3 +5,6 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="5711", TAG+="ua
 SUBSYSTEM=="i2c-dev", ATTR{name}=="SMBus PIIX4 adapter port 0*", TAG+="uaccess"
 # Màn hình nhiệt độ AIO Jonsbo (VID:PID dùng chung với thiết bị khác nên lọc theo tên)
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="5131", ATTRS{idProduct}=="2007", ATTRS{product}=="FBB", TAG+="uaccess"
+# Đèn card đồ hoạ Colorful: bus I2C nội bộ của card NVIDIA do Colorful (7377) sản xuất.
+# rgbctl chỉ ghi vào địa chỉ 0x61 sau khi nhận diện đúng chip LED.
+SUBSYSTEM=="i2c-dev", ATTR{name}=="NVIDIA i2c adapter 1 at *", ATTRS{vendor}=="0x10de", ATTRS{subsystem_vendor}=="0x7377", TAG+="uaccess"

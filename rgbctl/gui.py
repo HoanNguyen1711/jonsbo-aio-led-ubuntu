@@ -18,6 +18,7 @@ TARGET_LABELS = [
     ("argb3", "ARGB_V2_3"),
     ("board", "LED trên main"),
     ("ram", "RAM"),
+    ("gpu", "Card đồ hoạ"),
 ]
 _lock = threading.Lock()
 PRESETS = ["ff0000", "ff6a00", "ffd000", "00ff40", "00e5ff", "0050ff", "9d00ff", "ff00b0", "ffffff"]
@@ -116,7 +117,7 @@ class Window(Gtk.ApplicationWindow):
             "speed": int(self.speed.get_value()),
             "brightness": int(self.bright.get_value()),
         }
-        targets = ["mb", "ram"] if target == "all" else [target]
+        targets = core.ALL_TARGETS if target == "all" else [target]
         flash = self.flash.get_active()
         self.status.set_text("Đang áp dụng…")
 

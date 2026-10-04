@@ -34,8 +34,6 @@ ALL_ZONES = list(ZONES)
 
 LED_COUNT_STEPS = [32, 64, 256, 512, 1024]
 
-# header gửi màu từng LED cho argb1..3 (chế độ direct)
-DIRECT_HEADERS = [0x58, 0x59, 0x62]
 
 
 def _ioc(direction, nr, size):
@@ -104,12 +102,7 @@ class Fusion2:
             "<BBBBIBBBB28s", r
         )
         counts = [a01 & 0xF, a01 >> 4, a23 & 0xF, a23 >> 4, a45 & 0xF, a45 >> 4]
-        # vị trí byte R/G/B trong mỗi LED của dải ARGB (0x00RRGGBB = offset của từng màu)
-        cal = [struct.unpack_from("<I", r, 44)[0], struct.unpack_from("<I", r, 48)[0]]
-        r2 = self._get(0x61)
-        cal.append(struct.unpack_from("<I", r2, 4)[0])
         return {
-            "color_order": [((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF) for c in cal],
             "name": name.split(b"\0")[0].decode(errors="replace"),
             "fw": ".".join(str((fw >> s) & 0xFF) for s in (0, 8, 16, 24)),
             "flags": flags,
@@ -125,8 +118,8 @@ class Fusion2:
         self._send(bytes([REPORT_ID, 0x34, nib, nib, nib]))
 
     def set_direct_headers(self, zones):
-        """Các header ARGB trong `zones` chuyển sang direct (màu do máy gửi), còn lại chạy
-        hiệu ứng built-in. Lệnh 0x32 đặt cả mask một lần nên phải truyền đủ danh sách."""
+        """Các header ARGB trong `zones` chuyển sang direct, còn lại chạy hiệu ứng của chip.
+        Lệnh 0x32 đặt cả mask một lần. rgbctl không dùng direct nữa nên luôn gọi với []."""
         mask = 0
         for name in zones:
             if ZONES[name][1]:
@@ -134,26 +127,10 @@ class Fusion2:
         self._cmd(0x32, mask)
         time.sleep(0.05)
 
-    def set_direct_color(self, zone, color, count=64):
-        """Chế độ direct: tô cả dải ARGB của `zone` một màu (cần set_direct_headers trước)."""
-        idx = ["argb1", "argb2", "argb3"].index(zone)
-        header = DIRECT_HEADERS[idx]
-        o_r, o_g, o_b = self.info["color_order"][idx]
-        led = bytearray(3)
-        led[o_r], led[o_g], led[o_b] = color
-        offset = 0
-        while count > 0:
-            n = min(19, count)  # tối đa 19 LED mỗi gói
-            self._send(struct.pack("<BBHB", REPORT_ID, header, offset, n * 3) + bytes(led) * n)
-            offset += n * 3
-            count -= n
-
-    def set_effect(self, zones, effect, color=(255, 255, 255), speed=3, brightness=255,
-                   direct_zones=()):
+    def set_effect(self, zones, effect, color=(255, 255, 255), speed=3, brightness=255):
         """Đặt hiệu ứng phần cứng cho các vùng.
 
-        effect: EFFECT_*; color: (r, g, b); speed: 1 (chậm) .. 5 (nhanh);
-        brightness: 0..255; direct_zones: các vùng khác đang do daemon điều khiển (giữ direct).
+        effect: EFFECT_*; color: (r, g, b); speed: 1 (chậm) .. 5 (nhanh); brightness: 0..255.
         """
         # Main xuất xưởng để số LED = 0 (dù OpenRGB coi 0 là "32"): hiệu ứng phần cứng
         # khi đó tắt hết đèn ARGB, direct mode thì vẫn chạy. Đặt 64 nếu chưa đặt.
@@ -162,12 +139,12 @@ class Fusion2:
             self.info = self._read_info()
             time.sleep(0.05)
 
-        self.set_direct_headers([z for z in direct_zones if z not in zones])
+        self.set_direct_headers([])
         self.send_effects(zones, effect, color, speed, brightness)
 
     def send_effects(self, zones, effect, color=(255, 255, 255), speed=3, brightness=255):
-        """Chỉ gửi gói hiệu ứng + áp dụng (không đụng mask direct). Daemon dùng để tô LED
-        onboard mỗi khung hình vì LED onboard không có chế độ direct."""
+        """Chỉ gửi gói hiệu ứng + áp dụng (không đụng mask 0x32, không chờ). Daemon dùng
+        mỗi khung hình với EFFECT_STATIC để tô màu cho hiệu ứng phần mềm."""
         # Gigabyte: giá trị speed lớn = chu kỳ dài = chậm. Đổi thang 1..5 -> 8..0
         s = max(0, min(8, (5 - int(speed)) * 2))
         r, g, b = color
