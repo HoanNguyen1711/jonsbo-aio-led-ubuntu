@@ -7,16 +7,16 @@ import subprocess
 import sys
 import threading
 
-from . import aio_display, core, daemon
+from . import aio_display, core, daemon, i18n
 
 COLORS = [
-    ("Đỏ", "ff0000"),
-    ("Cam", "ff6a00"),
-    ("Vàng", "ffd000"),
-    ("Xanh lá", "00ff40"),
-    ("Xanh dương", "0050ff"),
-    ("Tím", "9d00ff"),
-    ("Trắng", "ffffff"),
+    ("color.red", "ff0000"),
+    ("color.orange", "ff6a00"),
+    ("color.yellow", "ffd000"),
+    ("color.green", "00ff40"),
+    ("color.blue", "0050ff"),
+    ("color.purple", "9d00ff"),
+    ("color.white", "ffffff"),
 ]
 
 ICONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons")
@@ -86,48 +86,57 @@ def main():
     ind.set_title("RGB Control")
 
     menu = Gtk.Menu()
+    labeled = []  # (menu item, khoá chuỗi) để đổi nhãn khi đổi ngôn ngữ trong GUI
 
-    def item(label, cb, parent=menu):
-        it = Gtk.MenuItem(label=label)
+    def item(key, cb, parent=menu):
+        it = Gtk.MenuItem(label=i18n.t(key))
         it.connect("activate", lambda _w: cb())
         parent.append(it)
+        labeled.append((it, key))
         return it
 
-    item("Cầu vồng", lambda: _apply_all("rainbow"))
+    item("mode.rainbow", lambda: _apply_all("rainbow"))
 
-    static = Gtk.MenuItem(label="Tĩnh")
+    static = Gtk.MenuItem(label=i18n.t("tray.static"))
+    labeled.append((static, "tray.static"))
     sub = Gtk.Menu()
-    for name, hexc in COLORS:
-        item(name, lambda c=hexc: _apply_all("static", c), sub)
+    for key, hexc in COLORS:
+        item(key, lambda c=hexc: _apply_all("static", c), sub)
     static.set_submenu(sub)
     menu.append(static)
 
-    item("Thở (màu hiện tại)", lambda: _apply_all("breathing"))
-    item("Tắt đèn", lambda: _apply_all("off"))
+    item("tray.breathing", lambda: _apply_all("breathing"))
+    item("tray.off", lambda: _apply_all("off"))
     menu.append(Gtk.SeparatorMenuItem())
 
-    aio = Gtk.CheckMenuItem(label="Màn hình AIO")
+    aio = Gtk.CheckMenuItem(label=i18n.t("aio"))
     aio.set_active(aio_display.get_settings()["enabled"])
     aio_handler = aio.connect("toggled", lambda w: daemon.set_aio_enabled(w.get_active()))
     menu.append(aio)
     menu.append(Gtk.SeparatorMenuItem())
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    item("Mở cửa sổ…", lambda: subprocess.Popen(
+    item("tray.open", lambda: subprocess.Popen(
         [sys.executable, "-m", "rgbctl", "gui"], cwd=root, start_new_session=True))
-    item("Thoát", Gtk.main_quit)
+    item("tray.quit", Gtk.main_quit)
 
     menu.show_all()
     ind.set_menu(menu)
 
     temp_path = aio_display.cpu_temp_path()
+    shown_lang = [i18n.current()]
 
     def tick():
+        lang = i18n.current()
+        if lang != shown_lang[0]:
+            for it, key in labeled:
+                it.set_label(i18n.t(key, lang=lang))
+            shown_lang[0] = lang
         try:
             temp = f": {aio_display.cpu_temp(temp_path):.0f}°C"
         except OSError:
             temp = ""
-        aio.set_label(f"Màn hình AIO{temp}")
+        aio.set_label(i18n.t("aio", lang=lang) + temp)
         # đồng bộ khi bật/tắt từ GUI, không kích hoạt lại handler
         on = aio_display.get_settings()["enabled"]
         if aio.get_active() != on:

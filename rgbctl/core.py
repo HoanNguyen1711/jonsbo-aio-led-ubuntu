@@ -8,14 +8,6 @@ from . import colorful_gpu, effects, fusion
 from . import corsair_ram as ram
 
 MODES = ["static", "breathing", "flash", "cycle", "rainbow", "off"]
-MODE_LABELS = {
-    "static": "Tĩnh",
-    "breathing": "Thở",
-    "flash": "Nháy",
-    "cycle": "Đổi màu",
-    "rainbow": "Cầu vồng",
-    "off": "Tắt",
-}
 
 # mục tiêu -> danh sách vùng. "mb" = tất cả LED/ARGB trên main.
 TARGETS = {

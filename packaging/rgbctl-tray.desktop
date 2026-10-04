@@ -1,7 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=RGB Control (tray)
-Comment=Icon tray, áp dụng lại màu đã lưu khi đăng nhập
+Comment=Tray icon, restores saved lighting at login
+Comment[vi]=Icon tray, áp dụng lại màu đã lưu khi đăng nhập
 Exec=rgbctl tray
 Icon=rgbctl
 NoDisplay=true

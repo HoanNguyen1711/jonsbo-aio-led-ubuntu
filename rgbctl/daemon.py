@@ -66,12 +66,15 @@ def start_tray():
 
 
 def set_aio_enabled(on):
-    """Bật/tắt màn hình AIO. Daemon vẫn chạy (còn lo hiệu ứng), chỉ ngừng gửi nhiệt độ."""
+    """Bật/tắt màn hình AIO. Daemon vẫn chạy (còn lo hiệu ứng), chỉ ngừng gửi nhiệt độ.
+    Trả về đường dẫn màn hình AIO nếu không có quyền ghi, còn lại None."""
     aio_display.save_settings(enabled=on)
     dev = aio_display.find_hidraw()
     if on and dev and not os.access(dev, os.W_OK):
-        return f"Không có quyền ghi {dev}. Chạy ./install.sh trước."
-    return start_background() if on else None
+        return dev
+    if on:
+        start_background()
+    return None
 
 
 def _lock_path(name):

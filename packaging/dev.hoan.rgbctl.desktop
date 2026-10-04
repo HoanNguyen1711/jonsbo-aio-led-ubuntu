@@ -1,7 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=RGB Control
-Comment=Điều khiển LED fan, AIO và RAM
+Comment=Control fan, AIO, RAM and GPU LEDs
+Comment[vi]=Điều khiển LED fan, AIO, RAM và card đồ hoạ
 Exec=rgbctl gui
 Icon=rgbctl
 Categories=Utility;Settings;HardwareSettings;
